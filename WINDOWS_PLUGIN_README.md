@@ -1,17 +1,22 @@
 
-# Native Windows Plugin Integration
+# Native VPN Plugin Integration
 
-The VPN functionality requires a native plugin to:
-- Spawn xray.exe (or aether.exe)
-- Set/clear system proxy via Windows Registry
-- Generate and trust Root CA certificate
+The plugin is already generated in `windows/plugins/vpn_plugin/`.
 
-We have provided a stub plugin in `windows/plugins/vpn_plugin/`.
+## For the build to work, you must:
 
-## To integrate:
-1. Copy the plugin folder into your Windows runner after `flutter create`.
-2. Add the plugin to the main CMakeLists.txt by including the subdirectory and linking.
+1. **Run `flutter create --platforms=windows .`** if you haven't already. This creates the base Windows runner.
 
-The GitHub Actions workflow will run `flutter create`, so you may need to copy these files into the generated `windows/` folder after creation. Consider modifying your workflow to copy these files after the `flutter create` step.
+2. **Modify `windows/runner/CMakeLists.txt`** to include the plugin:
+   - Add `add_subdirectory(../plugins/vpn_plugin vpn_plugin)` after the `flutter` subdirectory inclusion.
+   - Add `target_link_libraries(${PROJECT_NAME} PRIVATE vpn_plugin)`.
 
-Alternatively, you can generate the full Windows project locally once and commit it (removing the `flutter create` step from the workflow).
+3. **The GitHub Actions workflow already runs `flutter create`**, so you can commit everything and let it build.
+
+Alternatively, you can run `flutter create .` locally and manually copy the plugin integration steps.
+
+## Full plugin implementation:
+- Manages Xray process (start/stop)
+- Installs/removes Root CA certificate
+- Sets/restores Windows system proxy
+- Provides traffic stats and diagnostics
