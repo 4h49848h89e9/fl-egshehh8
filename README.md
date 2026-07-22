@@ -54,6 +54,8 @@ git push origin v1.0.0
 ├── .github/
 │   └── workflows/
 │       └── build-windows.yml
+├── docs/
+│   └── index.html
 ├── lib/
 │   └── main.dart
 ├── windows/         # Created by flutter create
