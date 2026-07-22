@@ -1,221 +1,634 @@
 #!/usr/bin/env python3
+"""
+Auto-generate Flutter Windows App with GitHub Actions
+Run: python create.py
+"""
+
 import os
 import sys
 import re
-import subprocess
 from pathlib import Path
-from datetime import datetime
 
-PROJECT_ROOT = Path(__file__).parent.resolve()
-REPO_OWNER = "4h49848h89e9"
-REPO_NAME = "fl-egshehh8"
-PUBSPEC_PATH = PROJECT_ROOT / "pubspec.yaml"
 
-class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    WHITE = '\033[97m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
-    RESET = '\033[0m'
+def get_valid_package_name():
+    """Get a valid Dart package name from user or generate one"""
+    print("\nPackage Name Configuration")
+    print("Rules: lowercase, underscore_separated, a-z0-9_")
+    print("Example: my_app, simple_flutter_app, nova_client")
+    print()
 
-if sys.platform == 'win32':
-    try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
-    except Exception:
-        pass
+    # Try to get from directory name
+    dir_name = os.path.basename(os.getcwd())
+    # Convert to valid package name
+    valid_name = re.sub(r'[^a-z0-9_]', '_', dir_name.lower())
+    valid_name = re.sub(r'^[0-9_]+', '', valid_name)  # Remove leading numbers/underscores
+    if not valid_name:
+        valid_name = 'flutter_app'
 
-def print_header(text):
-    print(f"\n{Colors.CYAN}{'=' * 70}{Colors.RESET}")
-    print(f"{Colors.BOLD}{Colors.WHITE}{text:^70}{Colors.RESET}")
-    print(f"{Colors.CYAN}{'=' * 70}{Colors.RESET}\n")
+    print(f"Suggested name from directory: {valid_name}")
 
-def print_success(text): print(f"{Colors.GREEN}OK  {text}{Colors.RESET}")
-def print_error(text): print(f"{Colors.RED}ERR {text}{Colors.RESET}")
-def print_warning(text): print(f"{Colors.YELLOW}WARN {text}{Colors.RESET}")
-def print_info(text): print(f"{Colors.BLUE}INFO {text}{Colors.RESET}")
+    while True:
+        name = input(f"Enter package name (or press Enter to use '{valid_name}'): ").strip()
+        if not name:
+            name = valid_name
 
-def run_git_command(cmd, check=False):
-    try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60)
-        if check and result.returncode != 0:
-            print_error(f"Git command failed: {cmd}")
-            print_error(result.stderr)
-        return result
-    except subprocess.TimeoutExpired:
-        print_error(f"Git command timed out: {cmd}")
-        return None
+        # Validate package name
+        if re.match(r'^[a-z][a-z0-9_]*$', name):
+            return name
+        else:
+            print("Invalid name! Use only lowercase letters, numbers, and underscores.")
+            print("   Must start with a letter, no dashes or spaces.")
+            print("   Example: my_app, simple_flutter_app\n")
 
-def git_add_all():
-    print_info("git add -A")
-    result = run_git_command("git add -A")
-    if result and result.returncode == 0:
-        print_success("git add -A successful")
-        return True
-    print_error("git add -A failed")
-    if result is not None:
-        if result.stderr:
-            print_error(result.stderr.strip())
-        if result.stdout:
-            print_error(result.stdout.strip())
-    return False
 
-def git_commit(message):
-    print_info(f'git commit -m "{message}"')
-    result = run_git_command(f'git commit -m "{message}"')
-    if result and result.returncode == 0:
-        print_success("Commit successful.")
-        return True
-    if result and "nothing to commit" in (result.stderr or ""):
-        print_warning("No changes to commit.")
-        return True
-    print_error("Commit failed.")
-    return False
+def create_directory_structure():
+    """Create all necessary directories"""
+    dirs = [
+        'lib',
+        '.github/workflows',
+    ]
 
-def git_force_push():
-    print_info("git push --force origin main")
-    result = run_git_command("git push --force origin main")
-    if result and result.returncode == 0:
-        print_success("Force push successful.")
-        return True
-    print_error("Force push failed.")
-    if result:
-        print_error(result.stderr)
-    return False
+    for dir_path in dirs:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
+        print(f"Created directory: {dir_path}")
 
-def get_next_version_tag():
-    result = run_git_command("git tag -l")
-    if result is None:
-        return "v1.0.1"
-    tags = result.stdout.splitlines()
-    pattern = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
-    max_version = [1, 0, 0]
-    for tag in tags:
-        match = pattern.match(tag)
-        if match:
-            major, minor, patch = map(int, match.groups())
-            if (major, minor, patch) > tuple(max_version):
-                max_version = [major, minor, patch]
-    max_version[2] += 1
-    return f"v{max_version[0]}.{max_version[1]}.{max_version[2]}"
 
-def delete_existing_tag(tag_name):
-    print_info(f"Deleting existing tag: {tag_name}")
-    run_git_command(f"git tag -d {tag_name}")
-    run_git_command(f"git push origin :refs/tags/{tag_name}")
+def create_main_dart():
+    """Create lib/main.dart"""
+    content = '''import 'package:flutter/material.dart';
 
-def create_and_push_tag(tag_name):
-    print_info(f"Creating and pushing tag: {tag_name}")
-    delete_existing_tag(tag_name)
-    result = run_git_command(f"git tag {tag_name}")
-    if result is None or result.returncode != 0:
-        print_error("Tag creation failed.")
-        return False
-    result = run_git_command(f"git push origin {tag_name}")
-    if result and result.returncode == 0:
-        print_success(f"Tag {tag_name} pushed successfully.")
-        return True
-    print_error("Tag push failed.")
-    return False
+void main() {
+  runApp(const MyApp());
+}
 
-def check_git_config():
-    name = run_git_command("git config --global user.name")
-    email = run_git_command("git config --global user.email")
-    if not name or not name.stdout.strip() or not email or not email.stdout.strip():
-        print_warning("Git user configuration not found!")
-        print_info("Setting default git config...")
-        run_git_command('git config --global user.name "Auto Pusher"')
-        run_git_command('git config --global user.email "auto@pusher.local"')
-    return True
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
-def check_pubspec_name():
-    """
-    Guards against the exact bug that broke this repo's CI before:
-    an invalid/non-ASCII package `name:` in pubspec.yaml makes
-    `flutter create --platforms=windows .` fail with exit code 1
-    inside the GitHub Actions workflow. We catch it locally, before
-    pushing, so a broken commit never goes up.
-    """
-    print_info("Checking pubspec.yaml package name...")
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Simple Flutter App',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const MyHomePage(),
+    );
+  }
+}
 
-    if not PUBSPEC_PATH.exists():
-        print_warning("pubspec.yaml not found, skipping name check.")
-        return True
+class MyHomePage extends StatelessWidget {
+  const MyHomePage({super.key});
 
-    raw = PUBSPEC_PATH.read_text(encoding="utf-8")
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Simple Flutter App'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.flutter_dash,
+              size: 120,
+              color: Colors.blue,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Hello, World!',
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Built with Flutter',
+              style: TextStyle(
+                fontSize: 20,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 40),
+            ElevatedButton.icon(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Button Clicked!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.thumb_up),
+              label: const Text('Click Me'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 15,
+                ),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(height: 30),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  const Text(
+                    'Version 1.0.0',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.desktop_windows, size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Windows',
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+'''
 
-    # Any codepoint outside printable ASCII on the name line (or anywhere
-    # in the file) is a red flag -- likely a hidden bidi/RTL control
-    # character sitting next to the name value.
-    non_ascii = [(i, ch) for i, ch in enumerate(raw) if ord(ch) > 127]
+    with open('lib/main.dart', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: lib/main.dart")
 
-    name_match = re.search(r'^name:\s*([^\s#]+)', raw, re.MULTILINE)
-    if not name_match:
-        print_error("Could not find a `name:` field in pubspec.yaml.")
-        return False
 
-    name_value = name_match.group(1)
-    valid_pattern = re.compile(r'^[a-z][a-z0-9_]*$')
+def create_pubspec(package_name):
+    """Create pubspec.yaml with valid package name"""
+    content = f'''name: {package_name}
+description: A simple Flutter Windows application
+publish_to: 'none'
+version: 1.0.0+1
 
-    if not valid_pattern.match(name_value):
-        print_error(f"Invalid package name in pubspec.yaml: '{name_value}'")
-        print_error("Must be lowercase, start with a letter, and use underscores only (no dashes).")
-        return False
+environment:
+  sdk: '>=3.0.0 <4.0.0'
 
-    if non_ascii:
-        print_warning(f"Found {len(non_ascii)} non-ASCII character(s) in pubspec.yaml.")
-        print_warning("These are usually harmless in comments/description, but double-check")
-        print_warning("nothing invisible is sitting right next to the `name:` value.")
+dependencies:
+  flutter:
+    sdk: flutter
 
-    print_success(f"pubspec.yaml name OK: '{name_value}'")
-    return True
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+'''
+
+    with open('pubspec.yaml', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print(f"Created: pubspec.yaml (package: {package_name})")
+
+
+def create_github_workflow(package_name):
+    """Create .github/workflows/build-windows.yml"""
+    content = '''name: Build and Release Windows App
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
+    - name: Enable Windows desktop support
+      run: flutter config --enable-windows-desktop
+
+    - name: Create Windows project files
+      run: flutter create --platforms=windows --project-name __PACKAGE_NAME__ .
+
+    - name: Get dependencies
+      run: flutter pub get
+
+    - name: Build Windows app
+      run: flutter build windows --release
+
+    - name: List build output
+      run: dir build\\windows\\x64\\runner\\Release
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-app
+        path: build/windows/x64/runner/Release/
+        retention-days: 30
+
+  create-release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Download Windows build
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-app
+        path: windows-app
+
+    - name: Zip the Windows app
+      run: |
+        cd windows-app
+        zip -r ../simple-flutter-app-windows.zip .
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: simple-flutter-app-windows.zip
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+'''
+    content = content.replace('__PACKAGE_NAME__', package_name)
+
+    with open('.github/workflows/build-windows.yml', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: .github/workflows/build-windows.yml")
+
+
+def create_gitignore():
+    """Create .gitignore"""
+    content = '''# Flutter
+.dart_tool/
+.packages/
+build/
+pubspec.lock
+*.iml
+*.iws
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Windows
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Flutter Windows specific
+windows/flutter/ephemeral/
+windows/runner/Release/
+'''
+
+    with open('.gitignore', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: .gitignore")
+
+
+def create_setup_script(package_name):
+    """Create setup.bat for Windows"""
+    content = f'''@echo off
+echo ====================================
+echo  Flutter Windows App Setup
+echo ====================================
+echo.
+
+echo Checking Flutter installation...
+flutter --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Flutter not found. Please install Flutter.
+    echo https://flutter.dev/docs/get-started/install/windows
+    pause
+    exit /b 1
+)
+
+echo.
+echo Enabling Windows desktop support...
+flutter config --enable-windows-desktop
+
+echo.
+echo Creating Windows project files...
+flutter create --platforms=windows --project-name {package_name} .
+
+echo.
+echo Getting dependencies...
+flutter pub get
+
+echo.
+echo Building Windows app...
+flutter build windows --release
+
+echo.
+echo ====================================
+echo  Build Complete!
+echo ====================================
+echo.
+echo Output: build\\windows\\x64\\runner\\Release\\
+echo.
+pause
+'''
+
+    with open('setup.bat', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: setup.bat")
+
+
+def create_setup_sh(package_name):
+    """Create setup.sh for Linux/Mac"""
+    content = f'''#!/bin/bash
+# Setup script for Flutter Windows app
+
+echo "===================================="
+echo " Flutter Windows App Setup"
+echo "===================================="
+echo ""
+
+# Check if Flutter is installed
+if ! command -v flutter &> /dev/null; then
+    echo "[ERROR] Flutter not found. Please install Flutter."
+    echo "https://flutter.dev/docs/get-started/install"
+    exit 1
+fi
+
+echo "Enabling Windows desktop support..."
+flutter config --enable-windows-desktop
+
+echo ""
+echo "Creating Windows project files..."
+flutter create --platforms=windows --project-name {package_name} .
+
+echo ""
+echo "Getting dependencies..."
+flutter pub get
+
+echo ""
+echo "Building Windows app..."
+flutter build windows --release
+
+echo ""
+echo "===================================="
+echo " Build Complete!"
+echo "===================================="
+echo ""
+echo "Output: build/windows/x64/runner/Release/"
+echo ""
+'''
+
+    with open('setup.sh', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: setup.sh")
+
+
+def create_analysis_options():
+    """Create analysis_options.yaml"""
+    content = '''include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_final_fields: true
+    use_key_in_widget_constructors: true
+    avoid_print: true
+    prefer_single_quotes: true
+    avoid_void_async: true
+    cancel_subscriptions: true
+    close_sinks: true
+    empty_statements: true
+    hash_and_equals: true
+    iterable_contains_unrelated_type: true
+    list_remove_unrelated_type: true
+    no_adjacent_strings_in_list: true
+    no_duplicate_case_values: true
+    unrelated_type_equality_checks: true
+    use_full_hex_values_for_flutter_colors: true
+'''
+
+    with open('analysis_options.yaml', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: analysis_options.yaml")
+
+
+def create_readme(package_name):
+    """Create README.md"""
+    content = f'''# {package_name.replace('_', ' ').title()}
+
+A simple Flutter Windows application with automated GitHub Actions builds.
+
+## Features
+
+- Built with Flutter (stable channel)
+- Windows desktop support
+- Automated builds with GitHub Actions
+- Release artifacts automatically attached to releases
+
+## Development
+
+### Prerequisites
+
+- Flutter SDK (stable channel)
+- Windows 10/11
+- Visual Studio 2022 with C++ development tools
+
+### Run Locally
+
+```bash
+# Get dependencies
+flutter pub get
+
+# Create Windows files (first time only)
+flutter create --platforms=windows --project-name {package_name} .
+
+# Run the app
+flutter run
+
+# Build for Windows
+flutter build windows --release
+```
+
+## GitHub Actions
+
+The workflow automatically:
+1. Builds the Windows app on every push
+2. Uploads the build as an artifact
+3. Creates a release when you push a tag
+
+### Create a Release
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+## Project Structure
+
+```
+.
+├── .github/
+│   └── workflows/
+│       └── build-windows.yml
+├── lib/
+│   └── main.dart
+├── windows/         # Created by flutter create
+├── analysis_options.yaml
+├── pubspec.yaml
+├── .gitignore
+├── setup.bat  (Windows)
+└── setup.sh   (Linux/Mac)
+```
+
+## Build Output
+
+The Windows build is located at:
+```
+build/windows/x64/runner/Release/
+```
+
+## Troubleshooting
+
+### "No Windows desktop project configured"
+Run: `flutter create --platforms=windows --project-name {package_name} .`
+
+### "Invalid package name" (referring to the checkout/folder name, not pubspec.yaml)
+`flutter create .` derives the project name from the current directory name
+unless you pass `--project-name` explicitly. If your repo/folder name contains
+dashes (e.g. `my-repo`), always pass `--project-name` (as this workflow and
+setup scripts already do) instead of relying on the folder name.
+
+### CMake "could not find any instance of Visual Studio"
+Make sure the workflow pins `runs-on: windows-2022` (not `windows-latest`)
+and does not pin an old Flutter version that predates the Visual Studio
+release on the runner.
+
+## License
+
+MIT
+'''
+
+    with open('README.md', 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("Created: README.md")
+
 
 def main():
-    print_header("FL-EGSHEHH8 AUTO PUSHER (FORCE PUSH ALL FILES)")
-    print_info(f"Project root: {PROJECT_ROOT}")
+    """Main function to create all files"""
+    print("\n" + "=" * 60)
+    print(" Flutter Windows App Generator")
+    print("=" * 60 + "\n")
 
-    check_git_config()
+    # Check if Flutter project already exists
+    if os.path.exists('lib') or os.path.exists('pubspec.yaml'):
+        response = input("This directory already has Flutter files. Continue? (y/N): ")
+        if response.lower() != 'y':
+            print("Cancelled.")
+            sys.exit(0)
 
-    print_header("1. Pre-push safety check (pubspec.yaml)")
-    if not check_pubspec_name():
-        print_error("Fix pubspec.yaml before pushing. Aborting to avoid breaking CI again.")
+    try:
+        # Get valid package name
+        package_name = get_valid_package_name()
+
+        print("\n" + "=" * 60)
+        print(f" Creating project: {package_name}")
+        print("=" * 60 + "\n")
+
+        # Create all files
+        create_directory_structure()
+        print()
+        create_main_dart()
+        create_pubspec(package_name)
+        create_github_workflow(package_name)
+        create_gitignore()
+        create_setup_script(package_name)
+        create_setup_sh(package_name)
+        create_analysis_options()
+        create_readme(package_name)
+
+        # Make setup.sh executable on Unix-like systems
+        if os.name != 'nt':
+            os.chmod('setup.sh', 0o755)
+
+        print("\n" + "=" * 60)
+        print(" All files created successfully!")
+        print("=" * 60)
+        print("\nProject Structure:")
+        print("   |-- .github/workflows/")
+        print("   |   `-- build-windows.yml")
+        print("   |-- lib/")
+        print("   |   `-- main.dart")
+        print("   |-- windows/         (will be created by flutter create)")
+        print("   |-- analysis_options.yaml")
+        print("   |-- pubspec.yaml")
+        print("   |-- README.md")
+        print("   |-- .gitignore")
+        print("   |-- setup.bat  (Windows)")
+        print("   `-- setup.sh   (Linux/Mac)")
+
+        print(f"\nPackage Name: {package_name}")
+
+        print("\nNext Steps:")
+        print("   1. Run setup script:")
+        print("      - Windows: setup.bat")
+        print("      - Linux/Mac: ./setup.sh")
+        print("   2. Or manually:")
+        print("      - flutter pub get")
+        print(f"      - flutter create --platforms=windows --project-name {package_name} .")
+        print("      - flutter build windows --release")
+        print("   3. Initialize Git:")
+        print("      - git init")
+        print("      - git add .")
+        print("      - git commit -m 'Initial commit'")
+        print("   4. Push to GitHub and Actions will build automatically")
+
+        print("\nTo create a release:")
+        print("   git tag v1.0.0")
+        print("   git push origin v1.0.0")
+
+        print("\n" + "=" * 60)
+
+    except KeyboardInterrupt:
+        print("\n\nCancelled by user.")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\nError: {e}")
         sys.exit(1)
 
-    print_header("2. Adding all files to git")
-    if not git_add_all():
-        print_error("git add failed. Exiting.")
-        sys.exit(1)
-
-    print_header("3. Committing changes")
-    commit_msg = f"Auto-fix: {datetime.now().strftime('%Y-%m-%d %H:%M')} (pusher.py)"
-    if not git_commit(commit_msg):
-        print_warning("Attempting empty commit...")
-        result = run_git_command('git commit --allow-empty -m "Auto-fix: No changes"')
-        if result and result.returncode != 0:
-            print_error("Commit failed. Exiting.")
-            sys.exit(1)
-
-    print_header("4. Force pushing to main")
-    if not git_force_push():
-        print_error("Force push failed. Exiting.")
-        sys.exit(1)
-
-    print_header("5. Creating new tag")
-    new_tag = get_next_version_tag()
-    print_info(f"New tag: {new_tag}")
-    if not create_and_push_tag(new_tag):
-        print_error("Tag creation/push failed. Exiting.")
-        sys.exit(1)
-
-    print_header("ALL DONE")
-    print_success(f"Tag {new_tag} created and pushed.")
-    print_info(f"Actions: https://github.com/{REPO_OWNER}/{REPO_NAME}/actions")
-    print_info(f"Release: https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{new_tag}")
 
 if __name__ == "__main__":
     main()

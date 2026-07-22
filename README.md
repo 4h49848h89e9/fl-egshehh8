@@ -4,16 +4,16 @@ A simple Flutter Windows application with automated GitHub Actions builds.
 
 ## Features
 
-- 🚀 Built with Flutter 3.24.0
-- 🪟 Windows desktop support
-- 🤖 Automated builds with GitHub Actions
-- 📦 Release artifacts automatically attached to releases
+- Built with Flutter (stable channel)
+- Windows desktop support
+- Automated builds with GitHub Actions
+- Release artifacts automatically attached to releases
 
 ## Development
 
 ### Prerequisites
 
-- Flutter SDK 3.24.0+
+- Flutter SDK (stable channel)
 - Windows 10/11
 - Visual Studio 2022 with C++ development tools
 
@@ -24,7 +24,7 @@ A simple Flutter Windows application with automated GitHub Actions builds.
 flutter pub get
 
 # Create Windows files (first time only)
-flutter create --platforms=windows .
+flutter create --platforms=windows --project-name simpleflutter .
 
 # Run the app
 flutter run
@@ -74,14 +74,18 @@ build/windows/x64/runner/Release/
 ## Troubleshooting
 
 ### "No Windows desktop project configured"
-Run: `flutter create --platforms=windows .`
+Run: `flutter create --platforms=windows --project-name simpleflutter .`
 
-### Invalid package name
-Make sure your package name in `pubspec.yaml` is:
-- All lowercase
-- Uses underscores (not dashes)
-- Starts with a letter
-- Example: `my_app`, `simple_flutter_app`
+### "Invalid package name" (referring to the checkout/folder name, not pubspec.yaml)
+`flutter create .` derives the project name from the current directory name
+unless you pass `--project-name` explicitly. If your repo/folder name contains
+dashes (e.g. `my-repo`), always pass `--project-name` (as this workflow and
+setup scripts already do) instead of relying on the folder name.
+
+### CMake "could not find any instance of Visual Studio"
+Make sure the workflow pins `runs-on: windows-2022` (not `windows-latest`)
+and does not pin an old Flutter version that predates the Visual Studio
+release on the runner.
 
 ## License
 

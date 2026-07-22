@@ -94,7 +94,7 @@ class MyHomePage extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.windows, size: 16, color: Colors.grey.shade600),
+                      Icon(Icons.desktop_windows, size: 16, color: Colors.grey.shade600),
                       const SizedBox(width: 5),
                       Text(
                         'Windows',

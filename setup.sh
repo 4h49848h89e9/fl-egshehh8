@@ -18,7 +18,7 @@ flutter config --enable-windows-desktop
 
 echo ""
 echo "Creating Windows project files..."
-flutter create --platforms=windows .
+flutter create --platforms=windows --project-name simpleflutter .
 
 echo ""
 echo "Getting dependencies..."
