@@ -1,5 +1,6 @@
+
 name: simpleflutter
-description: A simple Flutter Windows application
+description: OryvexVPN - Flutter Windows Client
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -10,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
   url_launcher: ^6.2.1
+  path_provider: ^2.1.0
+  process_run: ^0.13.0
+  win32: ^5.0.0
 
 dev_dependencies:
   flutter_test:
@@ -18,3 +22,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/config/
+    - assets/core/
+    - assets/images/
+    - assets/fonts/
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
