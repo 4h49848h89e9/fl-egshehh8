@@ -1,0 +1,28 @@
+# Flutter
+.dart_tool/
+.packages/
+build/
+pubspec.lock
+*.iml
+*.iws
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Windows
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Flutter Windows specific
+windows/flutter/ephemeral/
+windows/runner/Release/

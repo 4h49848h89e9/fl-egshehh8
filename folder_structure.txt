@@ -1,0 +1,474 @@
+c:\Users\nasle javan\Desktop\SimpleFlutter/
+
+├── .github
+│   └── workflows
+│       └── build-windows.yml
+  name: Build and Release Windows App
+  
+  on:
+    push:
+      branches: [ main, master ]
+      tags:
+        - 'v*'
+    pull_request:
+      branches: [ main, master ]
+    workflow_dispatch:
+  
+  jobs:
+    build-windows:
+      runs-on: windows-latest
+      
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+      
+      - name: Enable Windows desktop support
+        run: flutter config --enable-windows-desktop
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Create Windows project files
+        run: flutter create --platforms=windows .
+      
+      - name: Build Windows app
+        run: flutter build windows --release
+      
+      - name: List build output
+        run: dir build\windows\x64\runner\Release
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: build/windows/x64/runner/Release/
+          retention-days: 30
+  
+    create-release:
+      needs: build-windows
+      runs-on: ubuntu-latest
+      if: startsWith(github.ref, 'refs/tags/')
+      
+      steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-app
+          path: windows-app
+      
+      - name: Zip the Windows app
+        run: |
+          cd windows-app
+          zip -r ../simple-flutter-app-windows.zip .
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: simple-flutter-app-windows.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+├── .gitignore
+  # Flutter
+  .dart_tool/
+  .packages/
+  build/
+  pubspec.lock
+  *.iml
+  *.iws
+  .idea/
+  .vscode/
+  *.swp
+  *.swo
+  .DS_Store
+  
+  # Windows
+  *.exe
+  *.dll
+  *.pdb
+  *.ilk
+  *.exp
+  *.lib
+  *.suo
+  *.user
+  *.userosscache
+  *.sln.docstates
+  
+  # Flutter Windows specific
+  windows/flutter/ephemeral/
+  windows/runner/Release/
+  
+  # GitHub Actions
+  .github/
+├── README.md
+  # Simpleflutter
+  
+  A simple Flutter Windows application with automated GitHub Actions builds.
+  
+  ## Features
+  
+  - 🚀 Built with Flutter 3.24.0
+  - 🪟 Windows desktop support
+  - 🤖 Automated builds with GitHub Actions
+  - 📦 Release artifacts automatically attached to releases
+  
+  ## Development
+  
+  ### Prerequisites
+  
+  - Flutter SDK 3.24.0+
+  - Windows 10/11
+  - Visual Studio 2022 with C++ development tools
+  
+  ### Run Locally
+  
+  ```bash
+  # Get dependencies
+  flutter pub get
+  
+  # Create Windows files (first time only)
+  flutter create --platforms=windows .
+  
+  # Run the app
+  flutter run
+  
+  # Build for Windows
+  flutter build windows --release
+  ```
+  
+  ## GitHub Actions
+  
+  The workflow automatically:
+  1. Builds the Windows app on every push
+  2. Uploads the build as an artifact
+  3. Creates a release when you push a tag
+  
+  ### Create a Release
+  
+  ```bash
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
+  
+  ## Project Structure
+  
+  ```
+  .
+  ├── .github/
+  │   └── workflows/
+  │       └── build-windows.yml
+  ├── lib/
+  │   └── main.dart
+  ├── windows/         # Created by flutter create
+  ├── analysis_options.yaml
+  ├── pubspec.yaml
+  ├── .gitignore
+  ├── setup.bat  (Windows)
+  └── setup.sh   (Linux/Mac)
+  ```
+  
+  ## Build Output
+  
+  The Windows build is located at:
+  ```
+  build/windows/x64/runner/Release/
+  ```
+  
+  ## Troubleshooting
+  
+  ### "No Windows desktop project configured"
+  Run: `flutter create --platforms=windows .`
+  
+  ### Invalid package name
+  Make sure your package name in `pubspec.yaml` is:
+  - All lowercase
+  - Uses underscores (not dashes)
+  - Starts with a letter
+  - Example: `my_app`, `simple_flutter_app`
+  
+  ## License
+  
+  MIT
+├── analysis_options.yaml
+  include: package:flutter_lints/flutter.yaml
+  
+  linter:
+    rules:
+      prefer_const_constructors: true
+      prefer_final_fields: true
+      use_key_in_widget_constructors: true
+      avoid_print: true
+      prefer_single_quotes: true
+      avoid_void_async: true
+      cancel_subscriptions: true
+      close_sinks: true
+      empty_statements: true
+      hash_and_equals: true
+      iterable_contains_unrelated_type: true
+      list_remove_unrelated_type: true
+      no_adjacent_strings_in_list: true
+      no_duplicate_case_values: true
+      unrelated_type_equality_checks: true
+      use_full_hex_values_for_flutter_colors: true
+      use_key_in_widget_constructors: true
+├── auto.py
+  import os
+  
+  def print_tree(folder_path, file_handle, prefix="", show_content=False):
+      entries = sorted(os.listdir(folder_path))
+      for i, entry in enumerate(entries):
+          path = os.path.join(folder_path, entry)
+          is_last = i == len(entries) - 1
+          connector = "└── " if is_last else "├── "
+          file_handle.write(f"{prefix}{connector}{entry}\n")
+  
+          if os.path.isdir(path):
+              extension_prefix = "    " if is_last else "│   "
+              print_tree(path, file_handle, prefix + extension_prefix, show_content)
+          else:
+              if show_content:
+                  try:
+                      with open(path, "r", encoding="utf-8") as f:
+                          content = f.read().strip()
+                          if content:
+                              content_lines = content.splitlines()
+                              # Content appears directly under the file name
+                              for line in content_lines:
+                                  file_handle.write(f"  {line}\n")  # Just 2 spaces
+                  except Exception as e:
+                      file_handle.write(f"  [Error: {e}]\n")
+  
+  def save_tree_to_file(output_filename="folder_structure.txt"):
+      current_folder = os.path.dirname(os.path.abspath(__file__))
+      
+      with open(output_filename, "w", encoding="utf-8") as f:
+          f.write(f"{current_folder}/\n\n")
+          print_tree(current_folder, f, show_content=True)
+      
+      print(f"Output saved to {output_filename}")
+  
+  if __name__ == "__main__":
+      save_tree_to_file()
+├── folder_structure.txt
+├── lib
+│   └── main.dart
+  import 'package:flutter/material.dart';
+  
+  void main() {
+    runApp(const MyApp());
+  }
+  
+  class MyApp extends StatelessWidget {
+    const MyApp({super.key});
+  
+    @override
+    Widget build(BuildContext context) {
+      return MaterialApp(
+        title: 'Simple Flutter App',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: const MyHomePage(),
+      );
+    }
+  }
+  
+  class MyHomePage extends StatelessWidget {
+    const MyHomePage({super.key});
+  
+    @override
+    Widget build(BuildContext context) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Simple Flutter App'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.flutter_dash,
+                size: 120,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Hello, World!',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Built with Flutter',
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Button Clicked!'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.thumb_up),
+                label: const Text('Click Me'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 15,
+                  ),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+              ),
+              const SizedBox(height: 30),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Version 1.0.0',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.windows, size: 16, color: Colors.grey.shade600),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Windows',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+├── pubspec.yaml
+  name: fl_egshehh8  # ← اینجا خط زیر است، نه خط تیره
+  description: A simple Flutter Windows application
+  version: 1.0.0+1
+  
+  environment:
+    sdk: '>=3.0.0 <4.0.0'
+  
+  dependencies:
+    flutter:
+      sdk: flutter
+  
+  dev_dependencies:
+    flutter_test:
+      sdk: flutter
+    flutter_lints: ^3.0.0
+  
+  flutter:
+    uses-material-design: true
+├── setup.bat
+  @echo off
+  echo ====================================
+  echo  Flutter Windows App Setup
+  echo ====================================
+  echo.
+  
+  echo Checking Flutter installation...
+  flutter --version >nul 2>&1
+  if errorlevel 1 (
+      echo [ERROR] Flutter not found. Please install Flutter.
+      echo https://flutter.dev/docs/get-started/install/windows
+      pause
+      exit /b 1
+  )
+  
+  echo.
+  echo Enabling Windows desktop support...
+  flutter config --enable-windows-desktop
+  
+  echo.
+  echo Creating Windows project files...
+  flutter create --platforms=windows .
+  
+  echo.
+  echo Getting dependencies...
+  flutter pub get
+  
+  echo.
+  echo Building Windows app...
+  flutter build windows --release
+  
+  echo.
+  echo ====================================
+  echo  Build Complete!
+  echo ====================================
+  echo.
+  echo Output: build\windows\x64\runner\Release\
+  echo.
+  pause
+├── setup.sh
+  #!/bin/bash
+  # Setup script for Flutter Windows app
+  
+  echo "===================================="
+  echo " Flutter Windows App Setup"
+  echo "===================================="
+  echo ""
+  
+  # Check if Flutter is installed
+  if ! command -v flutter &> /dev/null; then
+      echo "[ERROR] Flutter not found. Please install Flutter."
+      echo "https://flutter.dev/docs/get-started/install"
+      exit 1
+  fi
+  
+  echo "Enabling Windows desktop support..."
+  flutter config --enable-windows-desktop
+  
+  echo ""
+  echo "Creating Windows project files..."
+  flutter create --platforms=windows .
+  
+  echo ""
+  echo "Getting dependencies..."
+  flutter pub get
+  
+  echo ""
+  echo "Building Windows app..."
+  flutter build windows --release
+  
+  echo ""
+  echo "===================================="
+  echo " Build Complete!"
+  echo "===================================="
+  echo ""
+  echo "Output: build/windows/x64/runner/Release/"
+  echo ""
+└── windows
