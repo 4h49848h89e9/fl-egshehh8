@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-fully.py - OryvexVPN Flutter Windows Generator
-Creates all Dart files, assets, and native plugin stub.
-Does NOT require Flutter to be installed.
+fully.py - Ultimate OryvexVPN Flutter Generator & Pusher
+Creates all files, copies assets, commits, and force-pushes with tagging.
+No external Flutter needed.
 """
 
 import os
 import sys
 import shutil
+import re
+import subprocess
 from pathlib import Path
+from datetime import datetime
 
-# ===== CONFIGURATION =====
+# ============================================================
+#  CONFIGURATION
+# ============================================================
 PROJECT_ROOT = Path(__file__).parent.resolve()
 CS_PROJECT_ROOT = Path(r"C:\Users\nasle javan\Desktop\OryvexVPNCore")
 CS_CORE_DIR = CS_PROJECT_ROOT / "OryvexVPN" / "Core"
 CS_FONTS_DIR = CS_PROJECT_ROOT / "OryvexVPN" / "Fonts"
 
+REPO_OWNER = "4h49848h89e9"
+REPO_NAME = "fl-egshehh8"
+
+# Files to copy from the C# project
 ASSETS_TO_COPY = {
     "config": CS_CORE_DIR / "oryvexvpn-config.json",
     "xray": CS_CORE_DIR / "xray.exe",
@@ -29,24 +38,29 @@ ASSETS_TO_COPY = {
     "fonts_regular": CS_FONTS_DIR / "Inter-Regular.ttf",
 }
 
-def print_header(text: str) -> None:
+GIT_TIMEOUT = 300  # seconds for push operations
+
+# ============================================================
+#  UTILITIES
+# ============================================================
+def print_header(text):
     print(f"\n{'='*70}")
     print(f"{text:^70}")
     print(f"{'='*70}\n")
 
-def print_success(text: str) -> None:
+def print_success(text):
     print(f"✅ {text}")
 
-def print_error(text: str) -> None:
+def print_error(text):
     print(f"❌ {text}")
 
-def print_info(text: str) -> None:
+def print_info(text):
     print(f"ℹ️  {text}")
 
-def ensure_dir(path: Path) -> None:
+def ensure_dir(path):
     path.mkdir(parents=True, exist_ok=True)
 
-def copy_file(src: Path, dst: Path) -> bool:
+def copy_file(src, dst):
     if not src.exists():
         print_error(f"Source not found: {src}")
         return False
@@ -59,22 +73,36 @@ def copy_file(src: Path, dst: Path) -> bool:
         print_error(f"Copy failed: {e}")
         return False
 
-def write_file(path: Path, content: str) -> None:
+def write_file(path, content):
     ensure_dir(path.parent)
     path.write_text(content, encoding='utf-8')
     print_success(f"Created {path}")
 
-def main() -> None:
-    print_header("ORYEXVPN FLUTTER BUILDER (fully.py)")
+def run_git_command(cmd, timeout=GIT_TIMEOUT):
+    try:
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True,
+            cwd=str(PROJECT_ROOT), timeout=timeout
+        )
+        return result
+    except subprocess.TimeoutExpired:
+        print_error(f"Git command timed out after {timeout}s: {cmd}")
+        return None
+    except Exception as e:
+        print_error(f"Git command exception: {e}")
+        return None
 
-    # 1. Clean old lib/ and assets/
+# ============================================================
+#  GENERATE FLUTTER PROJECT FILES
+# ============================================================
+def generate_flutter_project():
     print_info("Deleting old lib/ and assets/ ...")
     for d in [PROJECT_ROOT / "lib", PROJECT_ROOT / "assets"]:
         if d.exists():
             shutil.rmtree(d)
             print_success(f"Deleted {d.name}/")
 
-    # 2. Create asset directories
+    # Asset directories
     asset_dirs = [
         PROJECT_ROOT / "assets" / "config",
         PROJECT_ROOT / "assets" / "core",
@@ -85,7 +113,7 @@ def main() -> None:
         ensure_dir(d)
         print_success(f"Created {d}")
 
-    # 3. Copy assets from C# project
+    # Copy assets
     print_info("Copying assets from OryvexVPNCore...")
     copy_file(ASSETS_TO_COPY["config"], PROJECT_ROOT / "assets" / "config" / "oryvexvpn-config.json")
     copy_file(ASSETS_TO_COPY["xray"], PROJECT_ROOT / "assets" / "core" / "xray.exe")
@@ -98,10 +126,9 @@ def main() -> None:
     copy_file(ASSETS_TO_COPY["fonts_medium"], PROJECT_ROOT / "assets" / "fonts" / "Inter-Medium.ttf")
     copy_file(ASSETS_TO_COPY["fonts_regular"], PROJECT_ROOT / "assets" / "fonts" / "Inter-Regular.ttf")
 
-    # 4. Generate Dart source files
+    # ---- Generate Dart files ----
     print_info("Generating Dart source files...")
 
-    # ---- lib/main.dart ----
     write_file(PROJECT_ROOT / "lib" / "main.dart", """
 import 'package:flutter/material.dart';
 import 'package:simpleflutter/views/home_page.dart';
@@ -133,7 +160,6 @@ class MyApp extends StatelessWidget {
 }
 """)
 
-    # ---- lib/views/home_page.dart ----
     write_file(PROJECT_ROOT / "lib" / "views" / "home_page.dart", """
 import 'package:flutter/material.dart';
 import 'package:simpleflutter/widgets/sidebar.dart';
@@ -184,7 +210,6 @@ class _HomePageState extends State<HomePage> {
 }
 """)
 
-    # ---- lib/widgets/sidebar.dart ----
     write_file(PROJECT_ROOT / "lib" / "widgets" / "sidebar.dart", """
 import 'package:flutter/material.dart';
 
@@ -242,7 +267,6 @@ class Sidebar extends StatelessWidget {
 }
 """)
 
-    # ---- lib/views/dashboard_view.dart ----
     write_file(PROJECT_ROOT / "lib" / "views" / "dashboard_view.dart", """
 import 'package:flutter/material.dart';
 import 'package:simpleflutter/services/vpn_service.dart';
@@ -295,7 +319,6 @@ class _DashboardViewState extends State<DashboardView> {
 }
 """)
 
-    # ---- lib/views/settings_view.dart ----
     write_file(PROJECT_ROOT / "lib" / "views" / "settings_view.dart", """
 import 'package:flutter/material.dart';
 
@@ -311,7 +334,6 @@ class SettingsView extends StatelessWidget {
 }
 """)
 
-    # ---- lib/views/logs_view.dart ----
     write_file(PROJECT_ROOT / "lib" / "views" / "logs_view.dart", """
 import 'package:flutter/material.dart';
 
@@ -327,7 +349,6 @@ class LogsView extends StatelessWidget {
 }
 """)
 
-    # ---- lib/views/config_view.dart ----
     write_file(PROJECT_ROOT / "lib" / "views" / "config_view.dart", """
 import 'package:flutter/material.dart';
 
@@ -343,7 +364,6 @@ class ConfigView extends StatelessWidget {
 }
 """)
 
-    # ---- lib/views/diagnostics_view.dart ----
     write_file(PROJECT_ROOT / "lib" / "views" / "diagnostics_view.dart", """
 import 'package:flutter/material.dart';
 
@@ -359,7 +379,6 @@ class DiagnosticsView extends StatelessWidget {
 }
 """)
 
-    # ---- lib/widgets/connection_button.dart ----
     write_file(PROJECT_ROOT / "lib" / "widgets" / "connection_button.dart", """
 import 'package:flutter/material.dart';
 
@@ -401,7 +420,6 @@ class ConnectionButton extends StatelessWidget {
 }
 """)
 
-    # ---- lib/widgets/stats_card.dart ----
     write_file(PROJECT_ROOT / "lib" / "widgets" / "stats_card.dart", """
 import 'package:flutter/material.dart';
 
@@ -441,7 +459,6 @@ class StatsCard extends StatelessWidget {
 }
 """)
 
-    # ---- lib/services/vpn_service.dart ----
     write_file(PROJECT_ROOT / "lib" / "services" / "vpn_service.dart", """
 import 'package:flutter/services.dart';
 
@@ -474,7 +491,7 @@ class VpnService {
 }
 """)
 
-    # 5. Generate pubspec.yaml
+    # ---- pubspec.yaml ----
     write_file(PROJECT_ROOT / "pubspec.yaml", """
 name: simpleflutter
 description: OryvexVPN - Flutter Windows Client
@@ -516,7 +533,7 @@ flutter:
           weight: 700
 """)
 
-    # 6. Generate Windows native plugin stub
+    # ---- Windows plugin stub ----
     print_info("Generating Windows plugin stub...")
     windows_plugin_dir = PROJECT_ROOT / "windows" / "plugins" / "vpn_plugin"
     ensure_dir(windows_plugin_dir)
@@ -540,7 +557,6 @@ public:
                                              std::unique_ptr<MethodResult<>> result) {
             if (call.method_name() == "connect") {
                 // TODO: Start Xray/Aether processes
-                // For now just return success
                 result->Success();
             } else if (call.method_name() == "disconnect") {
                 // TODO: Stop processes
@@ -558,7 +574,6 @@ extern "C" __declspec(dllexport) void RegisterPlugins(
 }
 """)
 
-    # Also generate a CMakeLists.txt for the plugin (to be included manually)
     write_file(windows_plugin_dir / "CMakeLists.txt", """
 cmake_minimum_required(VERSION 3.15)
 project(vpn_plugin)
@@ -568,33 +583,139 @@ target_include_directories(vpn_plugin PRIVATE ${FLUTTER_ENGINE_DIR}/include)
 target_link_libraries(vpn_plugin PRIVATE flutter_engine)
 """)
 
-    # 7. Generate a README with instructions for native integration
-    write_file(PROJECT_ROOT / "WINDOWS_PLUGIN_README.md", """
-# Native Windows Plugin Integration
+    print_success("All Flutter files generated.")
 
-The VPN functionality requires a native plugin to:
-- Spawn xray.exe (or aether.exe)
-- Set/clear system proxy via Windows Registry
-- Generate and trust Root CA certificate
+# ============================================================
+#  GIT PUSH LOGIC (with extended timeout)
+# ============================================================
+def git_add_all():
+    print_info("git add -A")
+    result = run_git_command("git add -A")
+    if result and result.returncode == 0:
+        print_success("git add -A successful")
+        return True
+    print_error("git add -A failed")
+    return False
 
-We have provided a stub plugin in `windows/plugins/vpn_plugin/`.
+def git_commit(message):
+    print_info(f'git commit -m "{message}"')
+    result = run_git_command(f'git commit -m "{message}"')
+    if result and result.returncode == 0:
+        print_success("Commit successful.")
+        return True
+    if result and "nothing to commit" in (result.stderr or ""):
+        print_warning("No changes to commit.")
+        return True
+    print_error("Commit failed.")
+    return False
 
-## To integrate:
-1. Copy the plugin folder into your Windows runner after `flutter create`.
-2. Add the plugin to the main CMakeLists.txt by including the subdirectory and linking.
+def git_force_push():
+    print_info("git push --force origin main (timeout: 300s)")
+    result = run_git_command("git push --force origin main", timeout=300)
+    if result and result.returncode == 0:
+        print_success("Force push successful.")
+        return True
+    print_error("Force push failed.")
+    return False
 
-The GitHub Actions workflow will run `flutter create`, so you may need to copy these files into the generated `windows/` folder after creation. Consider modifying your workflow to copy these files after the `flutter create` step.
+def get_next_version_tag():
+    result = run_git_command("git tag -l", timeout=30)
+    if result is None:
+        return "v1.0.1"
+    tags = result.stdout.splitlines()
+    pattern = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
+    max_version = [1, 0, 0]
+    for tag in tags:
+        match = pattern.match(tag)
+        if match:
+            major, minor, patch = map(int, match.groups())
+            if (major, minor, patch) > tuple(max_version):
+                max_version = [major, minor, patch]
+    max_version[2] += 1
+    return f"v{max_version[0]}.{max_version[1]}.{max_version[2]}"
 
-Alternatively, you can generate the full Windows project locally once and commit it (removing the `flutter create` step from the workflow).
-""")
+def delete_existing_tag(tag_name):
+    print_info(f"Deleting existing tag: {tag_name}")
+    run_git_command(f"git tag -d {tag_name}", timeout=30)
+    run_git_command(f"git push origin :refs/tags/{tag_name}", timeout=60)
 
-    print_header("✅ GENERATION COMPLETE")
-    print("All Dart source files and assets have been created.")
-    print("The native plugin stub is in windows/plugins/vpn_plugin/")
-    print("See WINDOWS_PLUGIN_README.md for integration instructions.")
-    print("Now you can commit and push to GitHub.")
-    print("The existing workflow will build the app (it runs `flutter create` and then builds).")
-    print(f"Project location: {PROJECT_ROOT}")
+def create_and_push_tag(tag_name):
+    print_info(f"Creating and pushing tag: {tag_name}")
+    delete_existing_tag(tag_name)
+    result = run_git_command(f"git tag {tag_name}", timeout=30)
+    if result is None or result.returncode != 0:
+        print_error("Tag creation failed.")
+        return False
+    result = run_git_command(f"git push origin {tag_name}", timeout=60)
+    if result and result.returncode == 0:
+        print_success(f"Tag {tag_name} pushed successfully.")
+        return True
+    print_error("Tag push failed.")
+    return False
+
+def check_git_config():
+    name = run_git_command("git config --global user.name", timeout=10)
+    email = run_git_command("git config --global user.email", timeout=10)
+    if not name or not name.stdout.strip() or not email or not email.stdout.strip():
+        print_info("Setting default git config...")
+        run_git_command('git config --global user.name "Auto Pusher"', timeout=10)
+        run_git_command('git config --global user.email "auto@pusher.local"', timeout=10)
+    return True
+
+def push_to_github():
+    print_header("GIT PUSH")
+    if not check_git_config():
+        print_error("Git config check failed.")
+        return False
+
+    print_info("Adding all files...")
+    if not git_add_all():
+        return False
+
+    commit_msg = f"Auto-fix: {datetime.now().strftime('%Y-%m-%d %H:%M')} (fully.py)"
+    print_info("Committing...")
+    if not git_commit(commit_msg):
+        print_warning("Trying empty commit...")
+        result = run_git_command('git commit --allow-empty -m "Auto-fix: No changes"', timeout=30)
+        if result and result.returncode != 0:
+            print_error("Commit failed. Aborting push.")
+            return False
+
+    print_info("Force pushing...")
+    if not git_force_push():
+        return False
+
+    new_tag = get_next_version_tag()
+    print_info(f"New tag: {new_tag}")
+    if not create_and_push_tag(new_tag):
+        return False
+
+    print_success(f"Push complete. Tag: {new_tag}")
+    print_info(f"Actions: https://github.com/{REPO_OWNER}/{REPO_NAME}/actions")
+    print_info(f"Release: https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{new_tag}")
+    return True
+
+# ============================================================
+#  MAIN
+# ============================================================
+def main():
+    print_header("ORYEXVPN FLUTTER BUILDER + PUSHER (fully.py)")
+
+    # 1. Generate everything
+    generate_flutter_project()
+
+    # 2. Push to GitHub (if desired)
+    print_header("Push to GitHub?")
+    response = input("Do you want to commit and force-push to GitHub now? (y/N): ").strip().lower()
+    if response in ('y', 'yes'):
+        if push_to_github():
+            print_success("All done! Project is live on GitHub.")
+        else:
+            print_error("Push failed. Please check your network and git remote.")
+            sys.exit(1)
+    else:
+        print_info("Skipped push. You can run 'python pusher.py' later.")
+        print_info("Project files are ready in:", PROJECT_ROOT)
 
 if __name__ == "__main__":
     main()

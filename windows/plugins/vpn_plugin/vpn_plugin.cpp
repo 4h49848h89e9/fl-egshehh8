@@ -17,7 +17,6 @@ public:
                                              std::unique_ptr<MethodResult<>> result) {
             if (call.method_name() == "connect") {
                 // TODO: Start Xray/Aether processes
-                // For now just return success
                 result->Success();
             } else if (call.method_name() == "disconnect") {
                 // TODO: Stop processes
