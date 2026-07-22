@@ -15,11 +15,7 @@ class DashboardView extends StatefulWidget {
 class _DashboardViewState extends State<DashboardView> {
   final VpnService _vpnService = VpnService();
   late Timer _timer;
-  String _ping = '-- ms';
-  String _download = '0 B/s';
-  String _upload = '0 B/s';
-  String _dlTotal = '0 B';
-  String _ulTotal = '0 B';
+  TrafficStats _stats = TrafficStats.zero();
 
   @override
   void initState() {
@@ -27,11 +23,7 @@ class _DashboardViewState extends State<DashboardView> {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       final stats = await _vpnService.getTrafficStats();
       setState(() {
-        _ping = stats.ping;
-        _download = stats.downloadSpeed;
-        _upload = stats.uploadSpeed;
-        _dlTotal = stats.downloadTotal;
-        _ulTotal = stats.uploadTotal;
+        _stats = stats;
       });
     });
   }
@@ -66,16 +58,16 @@ class _DashboardViewState extends State<DashboardView> {
           const SizedBox(height: 40),
           Row(
             children: [
-              Expanded(child: StatsCard(icon: Icons.speed, label: 'LATENCY', value: _ping)),
-              Expanded(child: StatsCard(icon: Icons.arrow_downward, label: 'DOWNLOAD', value: _download)),
-              Expanded(child: StatsCard(icon: Icons.arrow_upward, label: 'UPLOAD', value: _upload)),
+              Expanded(child: StatsCard(icon: Icons.speed, label: 'LATENCY', value: _stats.ping)),
+              Expanded(child: StatsCard(icon: Icons.arrow_downward, label: 'DOWNLOAD', value: _stats.downloadSpeed)),
+              Expanded(child: StatsCard(icon: Icons.arrow_upward, label: 'UPLOAD', value: _stats.uploadSpeed)),
             ],
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: StatsCard(icon: Icons.cloud_download, label: 'TOTAL DOWN', value: _dlTotal)),
-              Expanded(child: StatsCard(icon: Icons.cloud_upload, label: 'TOTAL UP', value: _ulTotal)),
+              Expanded(child: StatsCard(icon: Icons.cloud_download, label: 'TOTAL DOWN', value: _stats.downloadTotal)),
+              Expanded(child: StatsCard(icon: Icons.cloud_upload, label: 'TOTAL UP', value: _stats.uploadTotal)),
               Expanded(child: const StatsCard(icon: Icons.timer, label: 'UPTIME', value: '00:00:00')),
             ],
           ),

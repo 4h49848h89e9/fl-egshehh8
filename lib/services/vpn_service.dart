@@ -3,6 +3,42 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 
+class TrafficStats {
+  final String ping;
+  final String downloadSpeed;
+  final String uploadSpeed;
+  final String downloadTotal;
+  final String uploadTotal;
+
+  TrafficStats({
+    required this.ping,
+    required this.downloadSpeed,
+    required this.uploadSpeed,
+    required this.downloadTotal,
+    required this.uploadTotal,
+  });
+
+  factory TrafficStats.fromMap(Map<String, dynamic> map) {
+    return TrafficStats(
+      ping: map['ping'] ?? '-- ms',
+      downloadSpeed: map['downloadSpeed'] ?? '0 B/s',
+      uploadSpeed: map['uploadSpeed'] ?? '0 B/s',
+      downloadTotal: map['downloadTotal'] ?? '0 B',
+      uploadTotal: map['uploadTotal'] ?? '0 B',
+    );
+  }
+
+  factory TrafficStats.zero() {
+    return TrafficStats(
+      ping: '-- ms',
+      downloadSpeed: '0 B/s',
+      uploadSpeed: '0 B/s',
+      downloadTotal: '0 B',
+      uploadTotal: '0 B',
+    );
+  }
+}
+
 class VpnService {
   static const MethodChannel _channel = MethodChannel('com.oryvexvpn/vpn');
 
@@ -42,9 +78,9 @@ class VpnService {
     }
   }
 
-  Future<Map<String, String>> getTrafficStats() async {
-    final stats = await _channel.invokeMethod('getTrafficStats');
-    return Map<String, String>.from(stats);
+  Future<TrafficStats> getTrafficStats() async {
+    final map = await _channel.invokeMethod('getTrafficStats');
+    return TrafficStats.fromMap(Map<String, dynamic>.from(map));
   }
 
   Stream<String> getLogs() => _logController.stream;

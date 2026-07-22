@@ -1,7 +1,7 @@
+
 # Flutter
 .dart_tool/
 .packages/
-build/
 pubspec.lock
 *.iml
 *.iws
@@ -11,9 +11,16 @@ pubspec.lock
 *.swo
 .DS_Store
 
-# Windows
+# Build outputs
+build/
+windows/flutter/ephemeral/
+windows/runner/Release/
+
+# Windows binaries – EXCEPT those in assets/
 *.exe
+!assets/**/*.exe
 *.dll
+!assets/**/*.dll
 *.pdb
 *.ilk
 *.exp
@@ -23,6 +30,6 @@ pubspec.lock
 *.userosscache
 *.sln.docstates
 
-# Flutter Windows specific
-windows/flutter/ephemeral/
-windows/runner/Release/
+# Keep config and data files
+!assets/config/*.json
+!assets/core/*.dat
