@@ -1,5 +1,1215 @@
-c:\Users\nasle javan\Desktop\SimpleFlutter/
+C:\Users\nasle javan\Desktop\SimpleFlutter/
 
+├── .git
+│   ├── COMMIT_EDITMSG
+  Auto-fix: 2026-07-23 00:42 (pusher.py)
+│   ├── FETCH_HEAD
+  2297693a85079a01e7107014b9bbe24b4070a28d	not-for-merge	branch 'main' of https://github.com/4h49848h89e9/fl-egshehh8
+│   ├── HEAD
+  ref: refs/heads/main
+│   ├── config
+  [core]
+  	repositoryformatversion = 0
+  	filemode = false
+  	bare = false
+  	logallrefupdates = true
+  	symlinks = false
+  	ignorecase = true
+  [remote "origin"]
+  	url = https://github.com/4h49848h89e9/fl-egshehh8.git
+  	fetch = +refs/heads/*:refs/remotes/origin/*
+  [branch "main"]
+  	vscode-merge-base = origin/main
+│   ├── description
+  Unnamed repository; edit this file 'description' to name the repository.
+│   ├── hooks
+│   │   ├── applypatch-msg.sample
+  #!/bin/sh
+  #
+  # An example hook script to check the commit log message taken by
+  # applypatch from an e-mail message.
+  #
+  # The hook should exit with non-zero status after issuing an
+  # appropriate message if it wants to stop the commit.  The hook is
+  # allowed to edit the commit message file.
+  #
+  # To enable this hook, rename this file to "applypatch-msg".
+  
+  . git-sh-setup
+  commitmsg="$(git rev-parse --git-path hooks/commit-msg)"
+  test -x "$commitmsg" && exec "$commitmsg" ${1+"$@"}
+  :
+│   │   ├── commit-msg.sample
+  #!/bin/sh
+  #
+  # An example hook script to check the commit log message.
+  # Called by "git commit" with one argument, the name of the file
+  # that has the commit message.  The hook should exit with non-zero
+  # status after issuing an appropriate message if it wants to stop the
+  # commit.  The hook is allowed to edit the commit message file.
+  #
+  # To enable this hook, rename this file to "commit-msg".
+  
+  # Uncomment the below to add a Signed-off-by line to the message.
+  # Doing this in a hook is a bad idea in general, but the prepare-commit-msg
+  # hook is more suited to it.
+  #
+  # SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+  # grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
+  
+  # This example catches duplicate Signed-off-by lines.
+  
+  test "" = "$(grep '^Signed-off-by: ' "$1" |
+  	 sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" || {
+  	echo >&2 Duplicate Signed-off-by lines.
+  	exit 1
+  }
+│   │   ├── fsmonitor-watchman.sample
+  #!/usr/bin/perl
+  
+  use strict;
+  use warnings;
+  use IPC::Open2;
+  
+  # An example hook script to integrate Watchman
+  # (https://facebook.github.io/watchman/) with git to speed up detecting
+  # new and modified files.
+  #
+  # The hook is passed a version (currently 2) and last update token
+  # formatted as a string and outputs to stdout a new update token and
+  # all files that have been modified since the update token. Paths must
+  # be relative to the root of the working tree and separated by a single NUL.
+  #
+  # To enable this hook, rename this file to "query-watchman" and set
+  # 'git config core.fsmonitor .git/hooks/query-watchman'
+  #
+  my ($version, $last_update_token) = @ARGV;
+  
+  # Uncomment for debugging
+  # print STDERR "$0 $version $last_update_token\n";
+  
+  # Check the hook interface version
+  if ($version ne 2) {
+  	die "Unsupported query-fsmonitor hook version '$version'.\n" .
+  	    "Falling back to scanning...\n";
+  }
+  
+  my $git_work_tree = get_working_dir();
+  
+  my $retry = 1;
+  
+  my $json_pkg;
+  eval {
+  	require JSON::XS;
+  	$json_pkg = "JSON::XS";
+  	1;
+  } or do {
+  	require JSON::PP;
+  	$json_pkg = "JSON::PP";
+  };
+  
+  launch_watchman();
+  
+  sub launch_watchman {
+  	my $o = watchman_query();
+  	if (is_work_tree_watched($o)) {
+  		output_result($o->{clock}, @{$o->{files}});
+  	}
+  }
+  
+  sub output_result {
+  	my ($clockid, @files) = @_;
+  
+  	# Uncomment for debugging watchman output
+  	# open (my $fh, ">", ".git/watchman-output.out");
+  	# binmode $fh, ":utf8";
+  	# print $fh "$clockid\n@files\n";
+  	# close $fh;
+  
+  	binmode STDOUT, ":utf8";
+  	print $clockid;
+  	print "\0";
+  	local $, = "\0";
+  	print @files;
+  }
+  
+  sub watchman_clock {
+  	my $response = qx/watchman clock "$git_work_tree"/;
+  	die "Failed to get clock id on '$git_work_tree'.\n" .
+  		"Falling back to scanning...\n" if $? != 0;
+  
+  	return $json_pkg->new->utf8->decode($response);
+  }
+  
+  sub watchman_query {
+  	my $pid = open2(\*CHLD_OUT, \*CHLD_IN, 'watchman -j --no-pretty')
+  	or die "open2() failed: $!\n" .
+  	"Falling back to scanning...\n";
+  
+  	# In the query expression below we're asking for names of files that
+  	# changed since $last_update_token but not from the .git folder.
+  	#
+  	# To accomplish this, we're using the "since" generator to use the
+  	# recency index to select candidate nodes and "fields" to limit the
+  	# output to file names only. Then we're using the "expression" term to
+  	# further constrain the results.
+  	my $last_update_line = "";
+  	if (substr($last_update_token, 0, 1) eq "c") {
+  		$last_update_token = "\"$last_update_token\"";
+  		$last_update_line = qq[\n"since": $last_update_token,];
+  	}
+  	my $query = <<"	END";
+  		["query", "$git_work_tree", {$last_update_line
+  			"fields": ["name"],
+  			"expression": ["not", ["dirname", ".git"]]
+  		}]
+  	END
+  
+  	# Uncomment for debugging the watchman query
+  	# open (my $fh, ">", ".git/watchman-query.json");
+  	# print $fh $query;
+  	# close $fh;
+  
+  	print CHLD_IN $query;
+  	close CHLD_IN;
+  	my $response = do {local $/; <CHLD_OUT>};
+  
+  	# Uncomment for debugging the watch response
+  	# open ($fh, ">", ".git/watchman-response.json");
+  	# print $fh $response;
+  	# close $fh;
+  
+  	die "Watchman: command returned no output.\n" .
+  	"Falling back to scanning...\n" if $response eq "";
+  	die "Watchman: command returned invalid output: $response\n" .
+  	"Falling back to scanning...\n" unless $response =~ /^\{/;
+  
+  	return $json_pkg->new->utf8->decode($response);
+  }
+  
+  sub is_work_tree_watched {
+  	my ($output) = @_;
+  	my $error = $output->{error};
+  	if ($retry > 0 and $error and $error =~ m/unable to resolve root .* directory (.*) is not watched/) {
+  		$retry--;
+  		my $response = qx/watchman watch "$git_work_tree"/;
+  		die "Failed to make watchman watch '$git_work_tree'.\n" .
+  		    "Falling back to scanning...\n" if $? != 0;
+  		$output = $json_pkg->new->utf8->decode($response);
+  		$error = $output->{error};
+  		die "Watchman: $error.\n" .
+  		"Falling back to scanning...\n" if $error;
+  
+  		# Uncomment for debugging watchman output
+  		# open (my $fh, ">", ".git/watchman-output.out");
+  		# close $fh;
+  
+  		# Watchman will always return all files on the first query so
+  		# return the fast "everything is dirty" flag to git and do the
+  		# Watchman query just to get it over with now so we won't pay
+  		# the cost in git to look up each individual file.
+  		my $o = watchman_clock();
+  		$error = $output->{error};
+  
+  		die "Watchman: $error.\n" .
+  		"Falling back to scanning...\n" if $error;
+  
+  		output_result($o->{clock}, ("/"));
+  		$last_update_token = $o->{clock};
+  
+  		eval { launch_watchman() };
+  		return 0;
+  	}
+  
+  	die "Watchman: $error.\n" .
+  	"Falling back to scanning...\n" if $error;
+  
+  	return 1;
+  }
+  
+  sub get_working_dir {
+  	my $working_dir;
+  	if ($^O =~ 'msys' || $^O =~ 'cygwin') {
+  		$working_dir = Win32::GetCwd();
+  		$working_dir =~ tr/\\/\//;
+  	} else {
+  		require Cwd;
+  		$working_dir = Cwd::cwd();
+  	}
+  
+  	return $working_dir;
+  }
+│   │   ├── post-update.sample
+  #!/bin/sh
+  #
+  # An example hook script to prepare a packed repository for use over
+  # dumb transports.
+  #
+  # To enable this hook, rename this file to "post-update".
+  
+  exec git update-server-info
+│   │   ├── pre-applypatch.sample
+  #!/bin/sh
+  #
+  # An example hook script to verify what is about to be committed
+  # by applypatch from an e-mail message.
+  #
+  # The hook should exit with non-zero status after issuing an
+  # appropriate message if it wants to stop the commit.
+  #
+  # To enable this hook, rename this file to "pre-applypatch".
+  
+  . git-sh-setup
+  precommit="$(git rev-parse --git-path hooks/pre-commit)"
+  test -x "$precommit" && exec "$precommit" ${1+"$@"}
+  :
+│   │   ├── pre-commit.sample
+  #!/bin/sh
+  #
+  # An example hook script to verify what is about to be committed.
+  # Called by "git commit" with no arguments.  The hook should
+  # exit with non-zero status after issuing an appropriate message if
+  # it wants to stop the commit.
+  #
+  # To enable this hook, rename this file to "pre-commit".
+  
+  if git rev-parse --verify HEAD >/dev/null 2>&1
+  then
+  	against=HEAD
+  else
+  	# Initial commit: diff against an empty tree object
+  	against=$(git hash-object -t tree /dev/null)
+  fi
+  
+  # If you want to allow non-ASCII filenames set this variable to true.
+  allownonascii=$(git config --type=bool hooks.allownonascii)
+  
+  # Redirect output to stderr.
+  exec 1>&2
+  
+  # Cross platform projects tend to avoid non-ASCII filenames; prevent
+  # them from being added to the repository. We exploit the fact that the
+  # printable range starts at the space character and ends with tilde.
+  if [ "$allownonascii" != "true" ] &&
+  	# Note that the use of brackets around a tr range is ok here, (it's
+  	# even required, for portability to Solaris 10's /usr/bin/tr), since
+  	# the square bracket bytes happen to fall in the designated range.
+  	test $(git diff-index --cached --name-only --diff-filter=A -z $against |
+  	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
+  then
+  	cat <<\EOF
+  Error: Attempt to add a non-ASCII file name.
+  
+  This can cause problems if you want to work with people on other platforms.
+  
+  To be portable it is advisable to rename the file.
+  
+  If you know what you are doing you can disable this check using:
+  
+    git config hooks.allownonascii true
+  EOF
+  	exit 1
+  fi
+  
+  # If there are whitespace errors, print the offending file names and fail.
+  exec git diff-index --check --cached $against --
+│   │   ├── pre-merge-commit.sample
+  #!/bin/sh
+  #
+  # An example hook script to verify what is about to be committed.
+  # Called by "git merge" with no arguments.  The hook should
+  # exit with non-zero status after issuing an appropriate message to
+  # stderr if it wants to stop the merge commit.
+  #
+  # To enable this hook, rename this file to "pre-merge-commit".
+  
+  . git-sh-setup
+  test -x "$GIT_DIR/hooks/pre-commit" &&
+          exec "$GIT_DIR/hooks/pre-commit"
+  :
+│   │   ├── pre-push.sample
+  #!/bin/sh
+  
+  # An example hook script to verify what is about to be pushed.  Called by "git
+  # push" after it has checked the remote status, but before anything has been
+  # pushed.  If this script exits with a non-zero status nothing will be pushed.
+  #
+  # This hook is called with the following parameters:
+  #
+  # $1 -- Name of the remote to which the push is being done
+  # $2 -- URL to which the push is being done
+  #
+  # If pushing without using a named remote those arguments will be equal.
+  #
+  # Information about the commits which are being pushed is supplied as lines to
+  # the standard input in the form:
+  #
+  #   <local ref> <local oid> <remote ref> <remote oid>
+  #
+  # This sample shows how to prevent push of commits where the log message starts
+  # with "WIP" (work in progress).
+  
+  remote="$1"
+  url="$2"
+  
+  zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+  
+  while read local_ref local_oid remote_ref remote_oid
+  do
+  	if test "$local_oid" = "$zero"
+  	then
+  		# Handle delete
+  		:
+  	else
+  		if test "$remote_oid" = "$zero"
+  		then
+  			# New branch, examine all commits
+  			range="$local_oid"
+  		else
+  			# Update to existing branch, examine new commits
+  			range="$remote_oid..$local_oid"
+  		fi
+  
+  		# Check for WIP commit
+  		commit=$(git rev-list -n 1 --grep '^WIP' "$range")
+  		if test -n "$commit"
+  		then
+  			echo >&2 "Found WIP commit in $local_ref, not pushing"
+  			exit 1
+  		fi
+  	fi
+  done
+  
+  exit 0
+│   │   ├── pre-rebase.sample
+  #!/bin/sh
+  #
+  # Copyright (c) 2006, 2008 Junio C Hamano
+  #
+  # The "pre-rebase" hook is run just before "git rebase" starts doing
+  # its job, and can prevent the command from running by exiting with
+  # non-zero status.
+  #
+  # The hook is called with the following parameters:
+  #
+  # $1 -- the upstream the series was forked from.
+  # $2 -- the branch being rebased (or empty when rebasing the current branch).
+  #
+  # This sample shows how to prevent topic branches that are already
+  # merged to 'next' branch from getting rebased, because allowing it
+  # would result in rebasing already published history.
+  
+  publish=next
+  basebranch="$1"
+  if test "$#" = 2
+  then
+  	topic="refs/heads/$2"
+  else
+  	topic=`git symbolic-ref HEAD` ||
+  	exit 0 ;# we do not interrupt rebasing detached HEAD
+  fi
+  
+  case "$topic" in
+  refs/heads/??/*)
+  	;;
+  *)
+  	exit 0 ;# we do not interrupt others.
+  	;;
+  esac
+  
+  # Now we are dealing with a topic branch being rebased
+  # on top of master.  Is it OK to rebase it?
+  
+  # Does the topic really exist?
+  git show-ref -q "$topic" || {
+  	echo >&2 "No such branch $topic"
+  	exit 1
+  }
+  
+  # Is topic fully merged to master?
+  not_in_master=`git rev-list --pretty=oneline ^master "$topic"`
+  if test -z "$not_in_master"
+  then
+  	echo >&2 "$topic is fully merged to master; better remove it."
+  	exit 1 ;# we could allow it, but there is no point.
+  fi
+  
+  # Is topic ever merged to next?  If so you should not be rebasing it.
+  only_next_1=`git rev-list ^master "^$topic" ${publish} | sort`
+  only_next_2=`git rev-list ^master           ${publish} | sort`
+  if test "$only_next_1" = "$only_next_2"
+  then
+  	not_in_topic=`git rev-list "^$topic" master`
+  	if test -z "$not_in_topic"
+  	then
+  		echo >&2 "$topic is already up to date with master"
+  		exit 1 ;# we could allow it, but there is no point.
+  	else
+  		exit 0
+  	fi
+  else
+  	not_in_next=`git rev-list --pretty=oneline ^${publish} "$topic"`
+  	/usr/bin/perl -e '
+  		my $topic = $ARGV[0];
+  		my $msg = "* $topic has commits already merged to public branch:\n";
+  		my (%not_in_next) = map {
+  			/^([0-9a-f]+) /;
+  			($1 => 1);
+  		} split(/\n/, $ARGV[1]);
+  		for my $elem (map {
+  				/^([0-9a-f]+) (.*)$/;
+  				[$1 => $2];
+  			} split(/\n/, $ARGV[2])) {
+  			if (!exists $not_in_next{$elem->[0]}) {
+  				if ($msg) {
+  					print STDERR $msg;
+  					undef $msg;
+  				}
+  				print STDERR " $elem->[1]\n";
+  			}
+  		}
+  	' "$topic" "$not_in_next" "$not_in_master"
+  	exit 1
+  fi
+  
+  <<\DOC_END
+  
+  This sample hook safeguards topic branches that have been
+  published from being rewound.
+  
+  The workflow assumed here is:
+  
+   * Once a topic branch forks from "master", "master" is never
+     merged into it again (either directly or indirectly).
+  
+   * Once a topic branch is fully cooked and merged into "master",
+     it is deleted.  If you need to build on top of it to correct
+     earlier mistakes, a new topic branch is created by forking at
+     the tip of the "master".  This is not strictly necessary, but
+     it makes it easier to keep your history simple.
+  
+   * Whenever you need to test or publish your changes to topic
+     branches, merge them into "next" branch.
+  
+  The script, being an example, hardcodes the publish branch name
+  to be "next", but it is trivial to make it configurable via
+  $GIT_DIR/config mechanism.
+  
+  With this workflow, you would want to know:
+  
+  (1) ... if a topic branch has ever been merged to "next".  Young
+      topic branches can have stupid mistakes you would rather
+      clean up before publishing, and things that have not been
+      merged into other branches can be easily rebased without
+      affecting other people.  But once it is published, you would
+      not want to rewind it.
+  
+  (2) ... if a topic branch has been fully merged to "master".
+      Then you can delete it.  More importantly, you should not
+      build on top of it -- other people may already want to
+      change things related to the topic as patches against your
+      "master", so if you need further changes, it is better to
+      fork the topic (perhaps with the same name) afresh from the
+      tip of "master".
+  
+  Let's look at this example:
+  
+  		   o---o---o---o---o---o---o---o---o---o "next"
+  		  /       /           /           /
+  		 /   a---a---b A     /           /
+  		/   /               /           /
+  	       /   /   c---c---c---c B         /
+  	      /   /   /             \         /
+  	     /   /   /   b---b C     \       /
+  	    /   /   /   /             \     /
+      ---o---o---o---o---o---o---o---o---o---o---o "master"
+  
+  
+  A, B and C are topic branches.
+  
+   * A has one fix since it was merged up to "next".
+  
+   * B has finished.  It has been fully merged up to "master" and "next",
+     and is ready to be deleted.
+  
+   * C has not merged to "next" at all.
+  
+  We would want to allow C to be rebased, refuse A, and encourage
+  B to be deleted.
+  
+  To compute (1):
+  
+  	git rev-list ^master ^topic next
+  	git rev-list ^master        next
+  
+  	if these match, topic has not merged in next at all.
+  
+  To compute (2):
+  
+  	git rev-list master..topic
+  
+  	if this is empty, it is fully merged to "master".
+  
+  DOC_END
+│   │   ├── pre-receive.sample
+  #!/bin/sh
+  #
+  # An example hook script to make use of push options.
+  # The example simply echoes all push options that start with 'echoback='
+  # and rejects all pushes when the "reject" push option is used.
+  #
+  # To enable this hook, rename this file to "pre-receive".
+  
+  if test -n "$GIT_PUSH_OPTION_COUNT"
+  then
+  	i=0
+  	while test "$i" -lt "$GIT_PUSH_OPTION_COUNT"
+  	do
+  		eval "value=\$GIT_PUSH_OPTION_$i"
+  		case "$value" in
+  		echoback=*)
+  			echo "echo from the pre-receive-hook: ${value#*=}" >&2
+  			;;
+  		reject)
+  			exit 1
+  		esac
+  		i=$((i + 1))
+  	done
+  fi
+│   │   ├── prepare-commit-msg.sample
+  #!/bin/sh
+  #
+  # An example hook script to prepare the commit log message.
+  # Called by "git commit" with the name of the file that has the
+  # commit message, followed by the description of the commit
+  # message's source.  The hook's purpose is to edit the commit
+  # message file.  If the hook fails with a non-zero status,
+  # the commit is aborted.
+  #
+  # To enable this hook, rename this file to "prepare-commit-msg".
+  
+  # This hook includes three examples. The first one removes the
+  # "# Please enter the commit message..." help message.
+  #
+  # The second includes the output of "git diff --name-status -r"
+  # into the message, just before the "git status" output.  It is
+  # commented because it doesn't cope with --amend or with squashed
+  # commits.
+  #
+  # The third example adds a Signed-off-by line to the message, that can
+  # still be edited.  This is rarely a good idea.
+  
+  COMMIT_MSG_FILE=$1
+  COMMIT_SOURCE=$2
+  SHA1=$3
+  
+  /usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
+  
+  # case "$COMMIT_SOURCE,$SHA1" in
+  #  ,|template,)
+  #    /usr/bin/perl -i.bak -pe '
+  #       print "\n" . `git diff --cached --name-status -r`
+  # 	 if /^#/ && $first++ == 0' "$COMMIT_MSG_FILE" ;;
+  #  *) ;;
+  # esac
+  
+  # SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+  # git interpret-trailers --in-place --trailer "$SOB" "$COMMIT_MSG_FILE"
+  # if test -z "$COMMIT_SOURCE"
+  # then
+  #   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
+  # fi
+│   │   ├── push-to-checkout.sample
+  #!/bin/sh
+  
+  # An example hook script to update a checked-out tree on a git push.
+  #
+  # This hook is invoked by git-receive-pack(1) when it reacts to git
+  # push and updates reference(s) in its repository, and when the push
+  # tries to update the branch that is currently checked out and the
+  # receive.denyCurrentBranch configuration variable is set to
+  # updateInstead.
+  #
+  # By default, such a push is refused if the working tree and the index
+  # of the remote repository has any difference from the currently
+  # checked out commit; when both the working tree and the index match
+  # the current commit, they are updated to match the newly pushed tip
+  # of the branch. This hook is to be used to override the default
+  # behaviour; however the code below reimplements the default behaviour
+  # as a starting point for convenient modification.
+  #
+  # The hook receives the commit with which the tip of the current
+  # branch is going to be updated:
+  commit=$1
+  
+  # It can exit with a non-zero status to refuse the push (when it does
+  # so, it must not modify the index or the working tree).
+  die () {
+  	echo >&2 "$*"
+  	exit 1
+  }
+  
+  # Or it can make any necessary changes to the working tree and to the
+  # index to bring them to the desired state when the tip of the current
+  # branch is updated to the new commit, and exit with a zero status.
+  #
+  # For example, the hook can simply run git read-tree -u -m HEAD "$1"
+  # in order to emulate git fetch that is run in the reverse direction
+  # with git push, as the two-tree form of git read-tree -u -m is
+  # essentially the same as git switch or git checkout that switches
+  # branches while keeping the local changes in the working tree that do
+  # not interfere with the difference between the branches.
+  
+  # The below is a more-or-less exact translation to shell of the C code
+  # for the default behaviour for git's push-to-checkout hook defined in
+  # the push_to_deploy() function in builtin/receive-pack.c.
+  #
+  # Note that the hook will be executed from the repository directory,
+  # not from the working tree, so if you want to perform operations on
+  # the working tree, you will have to adapt your code accordingly, e.g.
+  # by adding "cd .." or using relative paths.
+  
+  if ! git update-index -q --ignore-submodules --refresh
+  then
+  	die "Up-to-date check failed"
+  fi
+  
+  if ! git diff-files --quiet --ignore-submodules --
+  then
+  	die "Working directory has unstaged changes"
+  fi
+  
+  # This is a rough translation of:
+  #
+  #   head_has_history() ? "HEAD" : EMPTY_TREE_SHA1_HEX
+  if git cat-file -e HEAD 2>/dev/null
+  then
+  	head=HEAD
+  else
+  	head=$(git hash-object -t tree --stdin </dev/null)
+  fi
+  
+  if ! git diff-index --quiet --cached --ignore-submodules $head --
+  then
+  	die "Working directory has staged changes"
+  fi
+  
+  if ! git read-tree -u -m "$commit"
+  then
+  	die "Could not update working tree to new HEAD"
+  fi
+│   │   ├── sendemail-validate.sample
+  #!/bin/sh
+  
+  # An example hook script to validate a patch (and/or patch series) before
+  # sending it via email.
+  #
+  # The hook should exit with non-zero status after issuing an appropriate
+  # message if it wants to prevent the email(s) from being sent.
+  #
+  # To enable this hook, rename this file to "sendemail-validate".
+  #
+  # By default, it will only check that the patch(es) can be applied on top of
+  # the default upstream branch without conflicts in a secondary worktree. After
+  # validation (successful or not) of the last patch of a series, the worktree
+  # will be deleted.
+  #
+  # The following config variables can be set to change the default remote and
+  # remote ref that are used to apply the patches against:
+  #
+  #   sendemail.validateRemote (default: origin)
+  #   sendemail.validateRemoteRef (default: HEAD)
+  #
+  # Replace the TODO placeholders with appropriate checks according to your
+  # needs.
+  
+  validate_cover_letter () {
+  	file="$1"
+  	# TODO: Replace with appropriate checks (e.g. spell checking).
+  	true
+  }
+  
+  validate_patch () {
+  	file="$1"
+  	# Ensure that the patch applies without conflicts.
+  	git am -3 "$file" || return
+  	# TODO: Replace with appropriate checks for this patch
+  	# (e.g. checkpatch.pl).
+  	true
+  }
+  
+  validate_series () {
+  	# TODO: Replace with appropriate checks for the whole series
+  	# (e.g. quick build, coding style checks, etc.).
+  	true
+  }
+  
+  # main -------------------------------------------------------------------------
+  
+  if test "$GIT_SENDEMAIL_FILE_COUNTER" = 1
+  then
+  	remote=$(git config --default origin --get sendemail.validateRemote) &&
+  	ref=$(git config --default HEAD --get sendemail.validateRemoteRef) &&
+  	worktree=$(mktemp --tmpdir -d sendemail-validate.XXXXXXX) &&
+  	git worktree add -fd --checkout "$worktree" "refs/remotes/$remote/$ref" &&
+  	git config --replace-all sendemail.validateWorktree "$worktree"
+  else
+  	worktree=$(git config --get sendemail.validateWorktree)
+  fi || {
+  	echo "sendemail-validate: error: failed to prepare worktree" >&2
+  	exit 1
+  }
+  
+  unset GIT_DIR GIT_WORK_TREE
+  cd "$worktree" &&
+  
+  if grep -q "^diff --git " "$1"
+  then
+  	validate_patch "$1"
+  else
+  	validate_cover_letter "$1"
+  fi &&
+  
+  if test "$GIT_SENDEMAIL_FILE_COUNTER" = "$GIT_SENDEMAIL_FILE_TOTAL"
+  then
+  	git config --unset-all sendemail.validateWorktree &&
+  	trap 'git worktree remove -ff "$worktree"' EXIT &&
+  	validate_series
+  fi
+│   │   └── update.sample
+  #!/bin/sh
+  #
+  # An example hook script to block unannotated tags from entering.
+  # Called by "git receive-pack" with arguments: refname sha1-old sha1-new
+  #
+  # To enable this hook, rename this file to "update".
+  #
+  # Config
+  # ------
+  # hooks.allowunannotated
+  #   This boolean sets whether unannotated tags will be allowed into the
+  #   repository.  By default they won't be.
+  # hooks.allowdeletetag
+  #   This boolean sets whether deleting tags will be allowed in the
+  #   repository.  By default they won't be.
+  # hooks.allowmodifytag
+  #   This boolean sets whether a tag may be modified after creation. By default
+  #   it won't be.
+  # hooks.allowdeletebranch
+  #   This boolean sets whether deleting branches will be allowed in the
+  #   repository.  By default they won't be.
+  # hooks.denycreatebranch
+  #   This boolean sets whether remotely creating branches will be denied
+  #   in the repository.  By default this is allowed.
+  #
+  
+  # --- Command line
+  refname="$1"
+  oldrev="$2"
+  newrev="$3"
+  
+  # --- Safety check
+  if [ -z "$GIT_DIR" ]; then
+  	echo "Don't run this script from the command line." >&2
+  	echo " (if you want, you could supply GIT_DIR then run" >&2
+  	echo "  $0 <ref> <oldrev> <newrev>)" >&2
+  	exit 1
+  fi
+  
+  if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+  	echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+  	exit 1
+  fi
+  
+  # --- Config
+  allowunannotated=$(git config --type=bool hooks.allowunannotated)
+  allowdeletebranch=$(git config --type=bool hooks.allowdeletebranch)
+  denycreatebranch=$(git config --type=bool hooks.denycreatebranch)
+  allowdeletetag=$(git config --type=bool hooks.allowdeletetag)
+  allowmodifytag=$(git config --type=bool hooks.allowmodifytag)
+  
+  # check for no description
+  projectdesc=$(sed -e '1q' "$GIT_DIR/description")
+  case "$projectdesc" in
+  "Unnamed repository"* | "")
+  	echo "*** Project description file hasn't been set" >&2
+  	exit 1
+  	;;
+  esac
+  
+  # --- Check types
+  # if $newrev is 0000...0000, it's a commit to delete a ref.
+  zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+  if [ "$newrev" = "$zero" ]; then
+  	newrev_type=delete
+  else
+  	newrev_type=$(git cat-file -t $newrev)
+  fi
+  
+  case "$refname","$newrev_type" in
+  	refs/tags/*,commit)
+  		# un-annotated tag
+  		short_refname=${refname##refs/tags/}
+  		if [ "$allowunannotated" != "true" ]; then
+  			echo "*** The un-annotated tag, $short_refname, is not allowed in this repository" >&2
+  			echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+  			exit 1
+  		fi
+  		;;
+  	refs/tags/*,delete)
+  		# delete tag
+  		if [ "$allowdeletetag" != "true" ]; then
+  			echo "*** Deleting a tag is not allowed in this repository" >&2
+  			exit 1
+  		fi
+  		;;
+  	refs/tags/*,tag)
+  		# annotated tag
+  		if [ "$allowmodifytag" != "true" ] && git rev-parse $refname > /dev/null 2>&1
+  		then
+  			echo "*** Tag '$refname' already exists." >&2
+  			echo "*** Modifying a tag is not allowed in this repository." >&2
+  			exit 1
+  		fi
+  		;;
+  	refs/heads/*,commit)
+  		# branch
+  		if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
+  			echo "*** Creating a branch is not allowed in this repository" >&2
+  			exit 1
+  		fi
+  		;;
+  	refs/heads/*,delete)
+  		# delete branch
+  		if [ "$allowdeletebranch" != "true" ]; then
+  			echo "*** Deleting a branch is not allowed in this repository" >&2
+  			exit 1
+  		fi
+  		;;
+  	refs/remotes/*,commit)
+  		# tracking branch
+  		;;
+  	refs/remotes/*,delete)
+  		# delete tracking branch
+  		if [ "$allowdeletebranch" != "true" ]; then
+  			echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+  			exit 1
+  		fi
+  		;;
+  	*)
+  		# Anything else (is there anything else?)
+  		echo "*** Update hook: unknown type of update to ref $refname of type $newrev_type" >&2
+  		exit 1
+  		;;
+  esac
+  
+  # --- Finished
+  exit 0
+│   ├── index
+  [Error: 'utf-8' codec can't decode byte 0xfd in position 15: invalid start byte]
+│   ├── info
+│   │   └── exclude
+  # git ls-files --others --exclude-from=.git/info/exclude
+  # Lines that start with '#' are comments.
+  # For a project mostly in C, the following would be a good set of
+  # exclude patterns (uncomment them if you want to use them):
+  # *.[oa]
+  # *~
+│   ├── logs
+│   │   ├── HEAD
+  0000000000000000000000000000000000000000 4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 muvixo <godarshia20@gmail.com> 1784751358 +0330	commit (initial): Auto-fix: 2026-07-22 23:45 (pusher.py)
+  4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 0000000000000000000000000000000000000000 muvixo <godarshia20@gmail.com> 1784751389 +0330	Branch: renamed refs/heads/master to refs/heads/main
+  0000000000000000000000000000000000000000 4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 muvixo <godarshia20@gmail.com> 1784751389 +0330	Branch: renamed refs/heads/master to refs/heads/main
+  4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab muvixo <godarshia20@gmail.com> 1784751652 +0330	commit: Auto-fix: No changes
+  7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab 93fa126dd35fd74333573578a4004b6bbaa98b05 muvixo <godarshia20@gmail.com> 1784752432 +0330	commit: Auto-fix: 2026-07-23 00:03 (pusher.py)
+  93fa126dd35fd74333573578a4004b6bbaa98b05 9f4d75c86e2d58549dce9d26a96532673b557075 muvixo <godarshia20@gmail.com> 1784753830 +0330	commit: Auto-fix: 2026-07-23 00:27 (pusher.py)
+  9f4d75c86e2d58549dce9d26a96532673b557075 5334d3827ad2137c1a48b7bad88688628304f556 muvixo <godarshia20@gmail.com> 1784754762 +0330	commit: Auto-fix: 2026-07-23 00:42 (pusher.py)
+│   │   └── refs
+│   │       ├── heads
+│   │       │   └── main
+  0000000000000000000000000000000000000000 4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 muvixo <godarshia20@gmail.com> 1784751358 +0330	commit (initial): Auto-fix: 2026-07-22 23:45 (pusher.py)
+  4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 muvixo <godarshia20@gmail.com> 1784751389 +0330	Branch: renamed refs/heads/master to refs/heads/main
+  4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab muvixo <godarshia20@gmail.com> 1784751652 +0330	commit: Auto-fix: No changes
+  7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab 93fa126dd35fd74333573578a4004b6bbaa98b05 muvixo <godarshia20@gmail.com> 1784752432 +0330	commit: Auto-fix: 2026-07-23 00:03 (pusher.py)
+  93fa126dd35fd74333573578a4004b6bbaa98b05 9f4d75c86e2d58549dce9d26a96532673b557075 muvixo <godarshia20@gmail.com> 1784753830 +0330	commit: Auto-fix: 2026-07-23 00:27 (pusher.py)
+  9f4d75c86e2d58549dce9d26a96532673b557075 5334d3827ad2137c1a48b7bad88688628304f556 muvixo <godarshia20@gmail.com> 1784754762 +0330	commit: Auto-fix: 2026-07-23 00:42 (pusher.py)
+│   │       └── remotes
+│   │           └── origin
+│   │               ├── HEAD
+  0000000000000000000000000000000000000000 2297693a85079a01e7107014b9bbe24b4070a28d muvixo <godarshia20@gmail.com> 1784751334 +0330	fetch
+│   │               └── main
+  0000000000000000000000000000000000000000 2297693a85079a01e7107014b9bbe24b4070a28d muvixo <godarshia20@gmail.com> 1784751334 +0330	fetch origin: storing head
+  2297693a85079a01e7107014b9bbe24b4070a28d 4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 muvixo <godarshia20@gmail.com> 1784751464 +0330	update by push
+  4fa3b168111c1f1bf58fcdde19f7edc3d8a710a6 7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab muvixo <godarshia20@gmail.com> 1784751668 +0330	update by push
+  7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab 9f4d75c86e2d58549dce9d26a96532673b557075 muvixo <godarshia20@gmail.com> 1784753844 +0330	update by push
+  9f4d75c86e2d58549dce9d26a96532673b557075 5334d3827ad2137c1a48b7bad88688628304f556 muvixo <godarshia20@gmail.com> 1784754771 +0330	update by push
+│   ├── objects
+│   │   ├── 03
+│   │   │   └── 767910841abd1b27f1c28c2e27592ed0e2697a
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── 05
+│   │   │   ├── 8dfebc8d0741d65f5265e7f5c895166a0377fc
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 2: invalid start byte]
+│   │   │   └── d1a915e40f8865c5b90b4b5efbebd2d9d45c4b
+  [Error: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte]
+│   │   ├── 06
+│   │   │   └── 6b0a836181cb1cf9b121e85ce19c58a3cfc7c3
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 09
+│   │   │   ├── 256f8b59cacc576dedcd60be55cee6a7260d17
+  [Error: 'utf-8' codec can't decode byte 0x8e in position 5: invalid start byte]
+│   │   │   └── 718d280e9f7a4980349d941469074bdb80222e
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── 0b
+│   │   │   └── fbc8cbf5f454b11d39d0e970f0154ddee6d000
+  [Error: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte]
+│   │   ├── 18
+│   │   │   └── 7292250f0fe72834e0215da013dc4a0b4db233
+  [Error: 'utf-8' codec can't decode byte 0xb5 in position 2: invalid start byte]
+│   │   ├── 1b
+│   │   │   └── 674816394986fb6e7ef1ddf53e9676df6b8e21
+  [Error: 'utf-8' codec can't decode byte 0xb5 in position 2: invalid start byte]
+│   │   ├── 20
+│   │   │   └── 6603f1ebe33b626f33004a10adfee3d40fbf7d
+  [Error: 'utf-8' codec can't decode byte 0x90 in position 3: invalid start byte]
+│   │   ├── 22
+│   │   │   └── 97693a85079a01e7107014b9bbe24b4070a28d
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── 26
+│   │   │   └── 92ceb919956c868b81b2ef01455329c5603e41
+  [Error: 'utf-8' codec can't decode byte 0xcd in position 19: invalid continuation byte]
+│   │   ├── 2f
+│   │   │   └── 29344996216e257d0d392c1204b96f1d0a770a
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── 30
+│   │   │   └── 72874a196868494a007a0ac76f19cc20150125
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   ├── 35
+│   │   │   └── df7eb473bcace7061fab3913cf8c0a8333b4c1
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 36
+│   │   │   └── bcab3b409a55050cff98f3454e8defd5a01cd1
+  [Error: 'utf-8' codec can't decode byte 0xc2 in position 6: invalid continuation byte]
+│   │   ├── 37
+│   │   │   └── 04fae297cfb86b0bfd97c010ac76cda3e17c85
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   ├── 3b
+│   │   │   └── 3542448847b2e18e5aaa142ac49443fb472759
+  [Error: 'utf-8' codec can't decode byte 0x90 in position 3: invalid start byte]
+│   │   ├── 42
+│   │   │   └── 99805b7d29f39ce1d07b770a9ff49bd7351000
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   ├── 48
+│   │   │   └── fe389ff96698fa5d917e97592eb1e36f034893
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 4b
+│   │   │   └── cb87801e8039365589a552535f380b25bcc6d1
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── 4f
+│   │   │   └── a3b168111c1f1bf58fcdde19f7edc3d8a710a6
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 50
+│   │   │   └── 832bd476fd55f703300bb0493fb19a10805bc0
+  [Error: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte]
+│   │   ├── 53
+│   │   │   ├── 34d3827ad2137c1a48b7bad88688628304f556
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   │   └── efe99dae79866725e09324a7d5f8a188ca86c5
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── 57
+│   │   │   └── a43734c76551d516982a7100805bba52580ddc
+  [Error: 'utf-8' codec can't decode byte 0x92 in position 3: invalid start byte]
+│   │   ├── 58
+│   │   │   └── 9d90deb38f6e7f7e92566b7a8835766905524e
+  [Error: 'utf-8' codec can't decode byte 0x9d in position 2: invalid start byte]
+│   │   ├── 5c
+│   │   │   └── 1eeae36d8f8998b5f8c323e3d1998b6c7c5abc
+  [Error: 'utf-8' codec can't decode byte 0x8f in position 3: invalid start byte]
+│   │   ├── 5f
+│   │   │   └── 31647e8fbfa17dcd2c86d98bae1a0cc486b522
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 2: invalid start byte]
+│   │   ├── 62
+│   │   │   └── 8130d8ae843b01ed27842db29147ff9a0176ea
+  [Error: 'utf-8' codec can't decode byte 0xa5 in position 2: invalid start byte]
+│   │   ├── 65
+│   │   │   └── 15348963544ab3d94ac3b3b2b3d18b40dba8fd
+  [Error: 'utf-8' codec can't decode byte 0xcd in position 4: invalid continuation byte]
+│   │   ├── 66
+│   │   │   └── d4104f970fb92e0d692185b83ef7002c21cce8
+  [Error: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte]
+│   │   ├── 6b
+│   │   │   └── b8851f03616049e40321f7f1c8a2920c5d84c9
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── 6f
+│   │   │   ├── 3d91fd051ea7919adab31ba260e40cb1022d5c
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   │   └── ed6a9ff73de7fbf18fe7439ef633e97663bd49
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 7c
+│   │   │   └── b035c186ca4f0be09796fc6b56e82f9ee1f9ab
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 7f
+│   │   │   ├── 0643a34122c3dc50e8f01f3230adc84968a437
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   │   └── 7427e6270c6321de49aad5341792b8b7f4454e
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 81
+│   │   │   ├── 18605092af0db360925f828499ab15621a615c
+  [Error: 'utf-8' codec can't decode byte 0x90 in position 3: invalid start byte]
+│   │   │   └── 8ff6ddda62ce8af1d4a78a0a6b38478a1da908
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── 86
+│   │   │   ├── 25da05bce5a4bba1e66e5e2826876f9547a6ef
+  [Error: 'utf-8' codec can't decode byte 0x8f in position 3: invalid start byte]
+│   │   │   └── 7a52a0b4b96eb347f6a1881ba2a934b4135128
+  [Error: 'utf-8' codec can't decode byte 0x9c in position 9: invalid start byte]
+│   │   ├── 87
+│   │   │   └── 58ca8c530c53276353e564aea4c917badeea52
+  [Error: 'utf-8' codec can't decode byte 0x85 in position 14: invalid start byte]
+│   │   ├── 88
+│   │   │   └── fc8adde4065073cbf86f9e64001f15638261d6
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   ├── 8b
+│   │   │   └── 137891791fe96927ad78e64b0aad7bded08bdc
+  [Error: 'utf-8' codec can't decode byte 0xca in position 3: invalid continuation byte]
+│   │   ├── 91
+│   │   │   └── 40eabb6b8c5a384ab75fb74a79f1abea8b28c2
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 93
+│   │   │   ├── ba19d59d6418e5e3076e6a9d61b4b1557fdceb
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 2: invalid start byte]
+│   │   │   ├── d4bc58038e1d4bd01a55b6a437df544a9d0f74
+  [Error: 'utf-8' codec can't decode byte 0x90 in position 3: invalid start byte]
+│   │   │   └── fa126dd35fd74333573578a4004b6bbaa98b05
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── 94
+│   │   │   └── 66ae0e49695683774fbfa66a463559e680b6cf
+  [Error: 'utf-8' codec can't decode byte 0xcd in position 19: invalid continuation byte]
+│   │   ├── 97
+│   │   │   ├── 078e1205a0ff0038b0be9761ba132332db3628
+  [Error: 'utf-8' codec can't decode byte 0x8d in position 2: invalid start byte]
+│   │   │   └── 9f905a8fa49a390744e778324726d947e77712
+  [Error: 'utf-8' codec can't decode byte 0x85 in position 14: invalid start byte]
+│   │   ├── 99
+│   │   │   └── bfab03deae11b854d72dca2dc07cb169bdbb96
+  [Error: 'utf-8' codec can't decode byte 0x85 in position 14: invalid start byte]
+│   │   ├── 9b
+│   │   │   └── 458e436a48edcffc832a4e65dfc72fc1fa5552
+  [Error: 'utf-8' codec can't decode byte 0xa3 in position 6: invalid start byte]
+│   │   ├── 9e
+│   │   │   └── 907d16c358597e3cdb270a778651f52f8a255d
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── 9f
+│   │   │   └── 4d75c86e2d58549dce9d26a96532673b557075
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── a0
+│   │   │   └── 3e7f6d79a17911415f29235ce60cb7dba19c70
+  [Error: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte]
+│   │   ├── a3
+│   │   │   └── 995dceee4226cfdc47830a61c491b8a08e5817
+  [Error: 'utf-8' codec can't decode byte 0xbb in position 4: invalid start byte]
+│   │   ├── a4
+│   │   │   └── ab3d5c94c4d2f29fbdadf5d9b7f86e6c4343dd
+  [Error: 'utf-8' codec can't decode byte 0xa5 in position 2: invalid start byte]
+│   │   ├── aa
+│   │   │   ├── 4dee091306923678214f91423f417f9e3b420a
+  [Error: 'utf-8' codec can't decode byte 0x90 in position 3: invalid start byte]
+│   │   │   ├── 9386310f451dcda29268bcacb107e6699bfa42
+  [Error: 'utf-8' codec can't decode byte 0xd0 in position 18: invalid continuation byte]
+│   │   │   └── d674758247c6aa2e69fd66db14a89160a3bf0c
+  [Error: 'utf-8' codec can't decode byte 0x85 in position 14: invalid start byte]
+│   │   ├── ab
+│   │   │   ├── 3af3d4587ec643d3c62c4fce1660a9c6cc0e77
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   │   └── d0033ebe64da4478666b437b024f529bcc53ec
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── ac
+│   │   │   └── 388ed5e4828c659bd360efd19608f5354982e6
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── ae
+│   │   │   └── 117f2d3ce47c5591e9bc6e5d441f7b8e209f8b
+  [Error: 'utf-8' codec can't decode byte 0xa3 in position 6: invalid start byte]
+│   │   ├── b1
+│   │   │   └── a8806c094000ef9c6793bb8af042caf70b7afc
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   ├── b6
+│   │   │   └── 54f8b00cf4fbc9ba251015333d3394fb657a17
+  [Error: 'utf-8' codec can't decode byte 0xa5 in position 2: invalid start byte]
+│   │   ├── b7
+│   │   │   └── 55066ff6195bd73a6caf68a016efa794d0522e
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   ├── bc
+│   │   │   └── b0a5a731e13d1951ae6a606d54738cfbd0f441
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── c5
+│   │   │   └── 763c02b5ad1478274ba3ec695a1777fa9df8ab
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── c6
+│   │   │   └── d17e824faf7129f0d3289c31174eed68f3bc47
+  [Error: 'utf-8' codec can't decode byte 0x95 in position 2: invalid start byte]
+│   │   ├── d3
+│   │   │   ├── 8a1f27970a8ca648d94970b38947f79b10fb9f
+  [Error: 'utf-8' codec can't decode byte 0x9d in position 2: invalid start byte]
+│   │   │   ├── ce825b3a6eb26b857932bf4a679351ee24b59d
+  [Error: 'utf-8' codec can't decode byte 0xa3 in position 6: invalid start byte]
+│   │   │   └── f273bda28791b8b3fe419642ae77f59830bc90
+  [Error: 'utf-8' codec can't decode byte 0x9d in position 2: invalid start byte]
+│   │   ├── d4
+│   │   │   └── 502a7a9166ec7fe2994ceeea81ee822a945e25
+  [Error: 'utf-8' codec can't decode byte 0x85 in position 14: invalid start byte]
+│   │   ├── d8
+│   │   │   └── 864ded12193670f0f796194d6ebf7f0e8a512e
+  [Error: 'utf-8' codec can't decode byte 0xcd in position 18: invalid continuation byte]
+│   │   ├── dc
+│   │   │   ├── 50702131127a8fd2edcc9cf7d12b4e1d7e297e
+  [Error: 'utf-8' codec can't decode byte 0xc8 in position 17: invalid continuation byte]
+│   │   │   ├── 8e1896808bb8f2bef3365475cddf00d616afd2
+  [Error: 'utf-8' codec can't decode byte 0xb6 in position 8: invalid start byte]
+│   │   │   └── d0270192f57c158db10955b9d7364ceefc2a53
+  [Error: 'utf-8' codec can't decode byte 0xb6 in position 8: invalid start byte]
+│   │   ├── dd
+│   │   │   └── dbf18606413f0906d91b65d4850ec608bba714
+  [Error: 'utf-8' codec can't decode byte 0x93 in position 3: invalid start byte]
+│   │   ├── de
+│   │   │   └── 2e2dbdb2daa8234a6002fb412c3549f27c9f04
+  [Error: 'utf-8' codec can't decode byte 0x8d in position 2: invalid start byte]
+│   │   ├── e2
+│   │   │   └── 53b61c3b07252978c109fb5a11bb43454196fd
+  [Error: 'utf-8' codec can't decode byte 0xa5 in position 2: invalid start byte]
+│   │   ├── e3
+│   │   │   └── f440bc833c84b8b74501eed387eee75442d36e
+  [Error: 'utf-8' codec can't decode byte 0xa5 in position 2: invalid start byte]
+│   │   ├── e7
+│   │   │   └── e9859f87e53e6a643c498e0a4486115f4071ea
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── ee
+│   │   │   └── 436b530effe3e6627756583796429760225eae
+  [Error: 'utf-8' codec can't decode byte 0xbd in position 16: invalid start byte]
+│   │   ├── f3
+│   │   │   └── 4892ad45c11a983e273dc70353b55d8dcf76cf
+  [Error: 'utf-8' codec can't decode byte 0xcd in position 4: invalid continuation byte]
+│   │   ├── fe
+│   │   │   └── ea5e3247a1809a1023bf853076a69ff4294d44
+  [Error: 'utf-8' codec can't decode byte 0xad in position 2: invalid start byte]
+│   │   ├── info
+│   │   └── pack
+│   └── refs
+│       ├── heads
+│       │   └── main
+  5334d3827ad2137c1a48b7bad88688628304f556
+│       ├── remotes
+│       │   └── origin
+│       │       ├── HEAD
+  ref: refs/remotes/origin/main
+│       │       └── main
+  5334d3827ad2137c1a48b7bad88688628304f556
+│       └── tags
+│           ├── v1.0.1
+  7cb035c186ca4f0be09796fc6b56e82f9ee1f9ab
+│           ├── v1.0.2
+  9f4d75c86e2d58549dce9d26a96532673b557075
+│           └── v1.0.3
+  5334d3827ad2137c1a48b7bad88688628304f556
 ├── .github
 │   └── workflows
 │       └── build-windows.yml
@@ -16,33 +1226,32 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   
   jobs:
     build-windows:
-      runs-on: windows-latest
-      
+      runs-on: windows-2022
+  
       steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+  
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
           channel: 'stable'
-      
+  
       - name: Enable Windows desktop support
         run: flutter config --enable-windows-desktop
-      
+  
+      - name: Create Windows project files
+        run: flutter create --platforms=windows --project-name simpleflutter .
+  
       - name: Get dependencies
         run: flutter pub get
-      
-      - name: Create Windows project files
-        run: flutter create --platforms=windows .
-      
+  
       - name: Build Windows app
         run: flutter build windows --release
-      
+  
       - name: List build output
         run: dir build\windows\x64\runner\Release
-      
+  
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -54,19 +1263,19 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
       needs: build-windows
       runs-on: ubuntu-latest
       if: startsWith(github.ref, 'refs/tags/')
-      
+  
       steps:
       - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
           name: windows-app
           path: windows-app
-      
+  
       - name: Zip the Windows app
         run: |
           cd windows-app
           zip -r ../simple-flutter-app-windows.zip .
-      
+  
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -106,9 +1315,6 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   # Flutter Windows specific
   windows/flutter/ephemeral/
   windows/runner/Release/
-  
-  # GitHub Actions
-  .github/
 ├── README.md
   # Simpleflutter
   
@@ -116,16 +1322,16 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   
   ## Features
   
-  - 🚀 Built with Flutter 3.24.0
-  - 🪟 Windows desktop support
-  - 🤖 Automated builds with GitHub Actions
-  - 📦 Release artifacts automatically attached to releases
+  - Built with Flutter (stable channel)
+  - Windows desktop support
+  - Automated builds with GitHub Actions
+  - Release artifacts automatically attached to releases
   
   ## Development
   
   ### Prerequisites
   
-  - Flutter SDK 3.24.0+
+  - Flutter SDK (stable channel)
   - Windows 10/11
   - Visual Studio 2022 with C++ development tools
   
@@ -136,7 +1342,7 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   flutter pub get
   
   # Create Windows files (first time only)
-  flutter create --platforms=windows .
+  flutter create --platforms=windows --project-name simpleflutter .
   
   # Run the app
   flutter run
@@ -166,6 +1372,8 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   ├── .github/
   │   └── workflows/
   │       └── build-windows.yml
+  ├── docs/
+  │   └── index.html
   ├── lib/
   │   └── main.dart
   ├── windows/         # Created by flutter create
@@ -186,14 +1394,18 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   ## Troubleshooting
   
   ### "No Windows desktop project configured"
-  Run: `flutter create --platforms=windows .`
+  Run: `flutter create --platforms=windows --project-name simpleflutter .`
   
-  ### Invalid package name
-  Make sure your package name in `pubspec.yaml` is:
-  - All lowercase
-  - Uses underscores (not dashes)
-  - Starts with a letter
-  - Example: `my_app`, `simple_flutter_app`
+  ### "Invalid package name" (referring to the checkout/folder name, not pubspec.yaml)
+  `flutter create .` derives the project name from the current directory name
+  unless you pass `--project-name` explicitly. If your repo/folder name contains
+  dashes (e.g. `my-repo`), always pass `--project-name` (as this workflow and
+  setup scripts already do) instead of relying on the folder name.
+  
+  ### CMake "could not find any instance of Visual Studio"
+  Make sure the workflow pins `runs-on: windows-2022` (not `windows-latest`)
+  and does not pin an old Flutter version that predates the Visual Studio
+  release on the runner.
   
   ## License
   
@@ -219,8 +1431,1283 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
       no_duplicate_case_values: true
       unrelated_type_equality_checks: true
       use_full_hex_values_for_flutter_colors: true
-      use_key_in_widget_constructors: true
 ├── auto.py
+  #!/usr/bin/env python3
+  """
+  Auto-generate Flutter Windows App with GitHub Actions
+  Run: python create.py
+  """
+  
+  import os
+  import sys
+  import re
+  from pathlib import Path
+  
+  
+  def get_valid_package_name():
+      """Get a valid Dart package name from user or generate one"""
+      print("\nPackage Name Configuration")
+      print("Rules: lowercase, underscore_separated, a-z0-9_")
+      print("Example: my_app, simple_flutter_app, nova_client")
+      print()
+  
+      # Try to get from directory name
+      dir_name = os.path.basename(os.getcwd())
+      # Convert to valid package name
+      valid_name = re.sub(r'[^a-z0-9_]', '_', dir_name.lower())
+      valid_name = re.sub(r'^[0-9_]+', '', valid_name)  # Remove leading numbers/underscores
+      if not valid_name:
+          valid_name = 'flutter_app'
+  
+      print(f"Suggested name from directory: {valid_name}")
+  
+      while True:
+          name = input(f"Enter package name (or press Enter to use '{valid_name}'): ").strip()
+          if not name:
+              name = valid_name
+  
+          # Validate package name
+          if re.match(r'^[a-z][a-z0-9_]*$', name):
+              return name
+          else:
+              print("Invalid name! Use only lowercase letters, numbers, and underscores.")
+              print("   Must start with a letter, no dashes or spaces.")
+              print("   Example: my_app, simple_flutter_app\n")
+  
+  
+  def create_directory_structure():
+      """Create all necessary directories"""
+      dirs = [
+          'lib',
+          '.github/workflows',
+          'docs',
+      ]
+  
+      for dir_path in dirs:
+          Path(dir_path).mkdir(parents=True, exist_ok=True)
+          print(f"Created directory: {dir_path}")
+  
+  
+  def create_main_dart():
+      """Create lib/main.dart"""
+      content = '''import 'package:flutter/material.dart';
+  
+  void main() {
+    runApp(const MyApp());
+  }
+  
+  class MyApp extends StatelessWidget {
+    const MyApp({super.key});
+  
+    @override
+    Widget build(BuildContext context) {
+      return MaterialApp(
+        title: 'Simple Flutter App',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
+        ),
+        home: const MyHomePage(),
+      );
+    }
+  }
+  
+  class MyHomePage extends StatelessWidget {
+    const MyHomePage({super.key});
+  
+    @override
+    Widget build(BuildContext context) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Simple Flutter App'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.flutter_dash,
+                size: 120,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Hello, World!',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Built with Flutter',
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 40),
+              ElevatedButton.icon(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Button Clicked!'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.thumb_up),
+                label: const Text('Click Me'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 15,
+                  ),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+              ),
+              const SizedBox(height: 30),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Version 1.0.0',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.desktop_windows, size: 16, color: Colors.grey.shade600),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Windows',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+  '''
+  
+      with open('lib/main.dart', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: lib/main.dart")
+  
+  
+  def create_pubspec(package_name):
+      """Create pubspec.yaml with valid package name"""
+      content = f'''name: {package_name}
+  description: A simple Flutter Windows application
+  publish_to: 'none'
+  version: 1.0.0+1
+  
+  environment:
+    sdk: '>=3.0.0 <4.0.0'
+  
+  dependencies:
+    flutter:
+      sdk: flutter
+  
+  dev_dependencies:
+    flutter_test:
+      sdk: flutter
+    flutter_lints: ^3.0.0
+  
+  flutter:
+    uses-material-design: true
+  '''
+  
+      with open('pubspec.yaml', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print(f"Created: pubspec.yaml (package: {package_name})")
+  
+  
+  def create_github_workflow(package_name):
+      """Create .github/workflows/build-windows.yml"""
+      content = '''name: Build and Release Windows App
+  
+  on:
+    push:
+      branches: [ main, master ]
+      tags:
+        - 'v*'
+    pull_request:
+      branches: [ main, master ]
+    workflow_dispatch:
+  
+  jobs:
+    build-windows:
+      runs-on: windows-2022
+  
+      steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+  
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+  
+      - name: Enable Windows desktop support
+        run: flutter config --enable-windows-desktop
+  
+      - name: Create Windows project files
+        run: flutter create --platforms=windows --project-name __PACKAGE_NAME__ .
+  
+      - name: Get dependencies
+        run: flutter pub get
+  
+      - name: Build Windows app
+        run: flutter build windows --release
+  
+      - name: List build output
+        run: dir build\\windows\\x64\\runner\\Release
+  
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: build/windows/x64/runner/Release/
+          retention-days: 30
+  
+    create-release:
+      needs: build-windows
+      runs-on: ubuntu-latest
+      if: startsWith(github.ref, 'refs/tags/')
+  
+      steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-app
+          path: windows-app
+  
+      - name: Zip the Windows app
+        run: |
+          cd windows-app
+          zip -r ../simple-flutter-app-windows.zip .
+  
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: simple-flutter-app-windows.zip
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  '''
+      content = content.replace('__PACKAGE_NAME__', package_name)
+  
+      with open('.github/workflows/build-windows.yml', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: .github/workflows/build-windows.yml")
+  
+  
+  def create_gitignore():
+      """Create .gitignore"""
+      content = '''# Flutter
+  .dart_tool/
+  .packages/
+  build/
+  pubspec.lock
+  *.iml
+  *.iws
+  .idea/
+  .vscode/
+  *.swp
+  *.swo
+  .DS_Store
+  
+  # Windows
+  *.exe
+  *.dll
+  *.pdb
+  *.ilk
+  *.exp
+  *.lib
+  *.suo
+  *.user
+  *.userosscache
+  *.sln.docstates
+  
+  # Flutter Windows specific
+  windows/flutter/ephemeral/
+  windows/runner/Release/
+  '''
+  
+      with open('.gitignore', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: .gitignore")
+  
+  
+  def create_setup_script(package_name):
+      """Create setup.bat for Windows"""
+      content = f'''@echo off
+  echo ====================================
+  echo  Flutter Windows App Setup
+  echo ====================================
+  echo.
+  
+  echo Checking Flutter installation...
+  flutter --version >nul 2>&1
+  if errorlevel 1 (
+      echo [ERROR] Flutter not found. Please install Flutter.
+      echo https://flutter.dev/docs/get-started/install/windows
+      pause
+      exit /b 1
+  )
+  
+  echo.
+  echo Enabling Windows desktop support...
+  flutter config --enable-windows-desktop
+  
+  echo.
+  echo Creating Windows project files...
+  flutter create --platforms=windows --project-name {package_name} .
+  
+  echo.
+  echo Getting dependencies...
+  flutter pub get
+  
+  echo.
+  echo Building Windows app...
+  flutter build windows --release
+  
+  echo.
+  echo ====================================
+  echo  Build Complete!
+  echo ====================================
+  echo.
+  echo Output: build\\windows\\x64\\runner\\Release\\
+  echo.
+  pause
+  '''
+  
+      with open('setup.bat', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: setup.bat")
+  
+  
+  def create_setup_sh(package_name):
+      """Create setup.sh for Linux/Mac"""
+      content = f'''#!/bin/bash
+  # Setup script for Flutter Windows app
+  
+  echo "===================================="
+  echo " Flutter Windows App Setup"
+  echo "===================================="
+  echo ""
+  
+  # Check if Flutter is installed
+  if ! command -v flutter &> /dev/null; then
+      echo "[ERROR] Flutter not found. Please install Flutter."
+      echo "https://flutter.dev/docs/get-started/install"
+      exit 1
+  fi
+  
+  echo "Enabling Windows desktop support..."
+  flutter config --enable-windows-desktop
+  
+  echo ""
+  echo "Creating Windows project files..."
+  flutter create --platforms=windows --project-name {package_name} .
+  
+  echo ""
+  echo "Getting dependencies..."
+  flutter pub get
+  
+  echo ""
+  echo "Building Windows app..."
+  flutter build windows --release
+  
+  echo ""
+  echo "===================================="
+  echo " Build Complete!"
+  echo "===================================="
+  echo ""
+  echo "Output: build/windows/x64/runner/Release/"
+  echo ""
+  '''
+  
+      with open('setup.sh', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: setup.sh")
+  
+  
+  def create_analysis_options():
+      """Create analysis_options.yaml"""
+      content = '''include: package:flutter_lints/flutter.yaml
+  
+  linter:
+    rules:
+      prefer_const_constructors: true
+      prefer_final_fields: true
+      use_key_in_widget_constructors: true
+      avoid_print: true
+      prefer_single_quotes: true
+      avoid_void_async: true
+      cancel_subscriptions: true
+      close_sinks: true
+      empty_statements: true
+      hash_and_equals: true
+      iterable_contains_unrelated_type: true
+      list_remove_unrelated_type: true
+      no_adjacent_strings_in_list: true
+      no_duplicate_case_values: true
+      unrelated_type_equality_checks: true
+      use_full_hex_values_for_flutter_colors: true
+  '''
+  
+      with open('analysis_options.yaml', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: analysis_options.yaml")
+  
+  
+  def create_readme(package_name):
+      """Create README.md"""
+      content = f'''# {package_name.replace('_', ' ').title()}
+  
+  A simple Flutter Windows application with automated GitHub Actions builds.
+  
+  ## Features
+  
+  - Built with Flutter (stable channel)
+  - Windows desktop support
+  - Automated builds with GitHub Actions
+  - Release artifacts automatically attached to releases
+  
+  ## Development
+  
+  ### Prerequisites
+  
+  - Flutter SDK (stable channel)
+  - Windows 10/11
+  - Visual Studio 2022 with C++ development tools
+  
+  ### Run Locally
+  
+  ```bash
+  # Get dependencies
+  flutter pub get
+  
+  # Create Windows files (first time only)
+  flutter create --platforms=windows --project-name {package_name} .
+  
+  # Run the app
+  flutter run
+  
+  # Build for Windows
+  flutter build windows --release
+  ```
+  
+  ## GitHub Actions
+  
+  The workflow automatically:
+  1. Builds the Windows app on every push
+  2. Uploads the build as an artifact
+  3. Creates a release when you push a tag
+  
+  ### Create a Release
+  
+  ```bash
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
+  
+  ## Project Structure
+  
+  ```
+  .
+  ├── .github/
+  │   └── workflows/
+  │       └── build-windows.yml
+  ├── docs/
+  │   └── index.html
+  ├── lib/
+  │   └── main.dart
+  ├── windows/         # Created by flutter create
+  ├── analysis_options.yaml
+  ├── pubspec.yaml
+  ├── .gitignore
+  ├── setup.bat  (Windows)
+  └── setup.sh   (Linux/Mac)
+  ```
+  
+  ## Build Output
+  
+  The Windows build is located at:
+  ```
+  build/windows/x64/runner/Release/
+  ```
+  
+  ## Troubleshooting
+  
+  ### "No Windows desktop project configured"
+  Run: `flutter create --platforms=windows --project-name {package_name} .`
+  
+  ### "Invalid package name" (referring to the checkout/folder name, not pubspec.yaml)
+  `flutter create .` derives the project name from the current directory name
+  unless you pass `--project-name` explicitly. If your repo/folder name contains
+  dashes (e.g. `my-repo`), always pass `--project-name` (as this workflow and
+  setup scripts already do) instead of relying on the folder name.
+  
+  ### CMake "could not find any instance of Visual Studio"
+  Make sure the workflow pins `runs-on: windows-2022` (not `windows-latest`)
+  and does not pin an old Flutter version that predates the Visual Studio
+  release on the runner.
+  
+  ## License
+  
+  MIT
+  '''
+  
+      with open('README.md', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: README.md")
+  
+  
+  def create_index_html(package_name):
+      """Create docs/index.html - Project landing page"""
+      title = package_name.replace('_', ' ').title()
+      
+      content = f'''<!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>{title} - Flutter Windows App</title>
+      <style>
+          * {{
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+          }}
+  
+          body {{
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              min-height: 100vh;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              padding: 20px;
+          }}
+  
+          .container {{
+              background: white;
+              border-radius: 24px;
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+              max-width: 800px;
+              width: 100%;
+              padding: 60px 50px;
+              text-align: center;
+              transition: transform 0.3s ease;
+          }}
+  
+          .container:hover {{
+              transform: translateY(-5px);
+          }}
+  
+          .logo {{
+              margin-bottom: 30px;
+          }}
+  
+          .logo-svg {{
+              width: 120px;
+              height: 120px;
+          }}
+  
+          h1 {{
+              font-size: 2.5rem;
+              color: #1a1a2e;
+              margin-bottom: 10px;
+              font-weight: 700;
+              letter-spacing: -0.5px;
+          }}
+  
+          .subtitle {{
+              font-size: 1.1rem;
+              color: #666;
+              margin-bottom: 30px;
+              font-weight: 400;
+          }}
+  
+          .badge-container {{
+              display: flex;
+              justify-content: center;
+              gap: 12px;
+              margin-bottom: 35px;
+              flex-wrap: wrap;
+          }}
+  
+          .badge {{
+              background: #f0f0f0;
+              padding: 8px 18px;
+              border-radius: 20px;
+              font-size: 0.85rem;
+              color: #555;
+              font-weight: 500;
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+          }}
+  
+          .badge .dot {{
+              width: 8px;
+              height: 8px;
+              border-radius: 50%;
+              display: inline-block;
+          }}
+  
+          .badge .dot.green {{
+              background: #4caf50;
+          }}
+  
+          .badge .dot.blue {{
+              background: #667eea;
+          }}
+  
+          .badge .dot.orange {{
+              background: #ff9800;
+          }}
+  
+          .feature-grid {{
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: 20px;
+              margin: 35px 0 40px;
+              text-align: left;
+          }}
+  
+          .feature-item {{
+              background: #f8f9fa;
+              padding: 20px 20px 20px 25px;
+              border-radius: 12px;
+              border-left: 4px solid #667eea;
+              transition: all 0.3s ease;
+          }}
+  
+          .feature-item:hover {{
+              background: #f0f1ff;
+              transform: translateX(5px);
+          }}
+  
+          .feature-item .icon {{
+              font-size: 1.5rem;
+              margin-bottom: 8px;
+          }}
+  
+          .feature-item h3 {{
+              font-size: 0.95rem;
+              color: #1a1a2e;
+              margin-bottom: 4px;
+          }}
+  
+          .feature-item p {{
+              font-size: 0.85rem;
+              color: #666;
+              line-height: 1.4;
+          }}
+  
+          .button-group {{
+              display: flex;
+              gap: 15px;
+              justify-content: center;
+              flex-wrap: wrap;
+              margin-top: 10px;
+          }}
+  
+          .btn {{
+              padding: 14px 32px;
+              border-radius: 12px;
+              font-size: 1rem;
+              font-weight: 600;
+              text-decoration: none;
+              transition: all 0.3s ease;
+              display: inline-flex;
+              align-items: center;
+              gap: 10px;
+          }}
+  
+          .btn-primary {{
+              background: #667eea;
+              color: white;
+              box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+          }}
+  
+          .btn-primary:hover {{
+              background: #5a6fd6;
+              transform: translateY(-2px);
+              box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+          }}
+  
+          .btn-secondary {{
+              background: #f0f0f0;
+              color: #333;
+          }}
+  
+          .btn-secondary:hover {{
+              background: #e0e0e0;
+              transform: translateY(-2px);
+          }}
+  
+          .btn-github {{
+              background: #24292e;
+              color: white;
+          }}
+  
+          .btn-github:hover {{
+              background: #1a1e22;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 15px rgba(36, 41, 46, 0.4);
+          }}
+  
+          .version-info {{
+              margin-top: 40px;
+              padding-top: 30px;
+              border-top: 1px solid #e0e0e0;
+              font-size: 0.9rem;
+              color: #999;
+          }}
+  
+          .version-info strong {{
+              color: #667eea;
+          }}
+  
+          @media (max-width: 640px) {{
+              .container {{
+                  padding: 40px 25px;
+              }}
+  
+              h1 {{
+                  font-size: 2rem;
+              }}
+  
+              .feature-grid {{
+                  grid-template-columns: 1fr;
+              }}
+  
+              .button-group {{
+                  flex-direction: column;
+                  align-items: stretch;
+              }}
+  
+              .btn {{
+                  justify-content: center;
+              }}
+          }}
+      </style>
+  </head>
+  <body>
+      <div class="container">
+          <div class="logo">
+              <svg class="logo-svg" viewBox="0 0 256 318" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M128 318L0 190.8V63.6L128 190.8L256 63.6V190.8L128 318Z" fill="#667eea" opacity="0.9"/>
+                  <path d="M128 190.8L0 63.6L128 -63.6L256 63.6L128 190.8Z" fill="#764ba2" opacity="0.8"/>
+                  <path d="M128 127.2L0 0V63.6L128 190.8L256 63.6V0L128 127.2Z" fill="#667eea" opacity="0.6"/>
+                  <circle cx="128" cy="63.6" r="12" fill="white" opacity="0.9"/>
+                  <circle cx="128" cy="190.8" r="12" fill="white" opacity="0.9"/>
+              </svg>
+          </div>
+  
+          <h1>{title}</h1>
+          <p class="subtitle">A modern Flutter Windows application with automated builds</p>
+  
+          <div class="badge-container">
+              <span class="badge">
+                  <span class="dot green"></span>
+                  Flutter
+              </span>
+              <span class="badge">
+                  <span class="dot blue"></span>
+                  Windows 10/11
+              </span>
+              <span class="badge">
+                  <span class="dot orange"></span>
+                  v1.0.0
+              </span>
+              <span class="badge">
+                  ⚡ GitHub Actions
+              </span>
+          </div>
+  
+          <div class="feature-grid">
+              <div class="feature-item">
+                  <div class="icon">📱</div>
+                  <h3>Flutter Framework</h3>
+                  <p>Built with Flutter stable channel for modern UI</p>
+              </div>
+              <div class="feature-item">
+                  <div class="icon">🖥️</div>
+                  <h3>Windows Native</h3>
+                  <p>Fully integrated Windows desktop application</p>
+              </div>
+              <div class="feature-item">
+                  <div class="icon">🚀</div>
+                  <h3>CI/CD Ready</h3>
+                  <p>Automated builds with GitHub Actions</p>
+              </div>
+              <div class="feature-item">
+                  <div class="icon">📦</div>
+                  <h3>Easy Releases</h3>
+                  <p>One-command releases with tags</p>
+              </div>
+          </div>
+  
+          <div class="button-group">
+              <a href="#" class="btn btn-primary">
+                  ⬇️ Download Latest
+              </a>
+              <a href="#" class="btn btn-github">
+                  <svg height="20" viewBox="0 0 16 16" width="20" fill="currentColor">
+                      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                  </svg>
+                  View on GitHub
+              </a>
+              <a href="#" class="btn btn-secondary">
+                  📖 Documentation
+              </a>
+          </div>
+  
+          <div class="version-info">
+              <strong>{package_name}</strong> • Built with ❤️ using Flutter • 
+              <span id="year">2026</span>
+          </div>
+      </div>
+  
+      <script>
+          document.getElementById('year').textContent = new Date().getFullYear();
+      </script>
+  </body>
+  </html>
+  '''
+  
+      with open('docs/index.html', 'w', encoding='utf-8') as f:
+          f.write(content)
+      print("Created: docs/index.html")
+  
+  
+  def main():
+      """Main function to create all files"""
+      print("\n" + "=" * 60)
+      print(" Flutter Windows App Generator")
+      print("=" * 60 + "\n")
+  
+      # Check if Flutter project already exists
+      if os.path.exists('lib') or os.path.exists('pubspec.yaml'):
+          response = input("This directory already has Flutter files. Continue? (y/N): ")
+          if response.lower() != 'y':
+              print("Cancelled.")
+              sys.exit(0)
+  
+      try:
+          # Get valid package name
+          package_name = get_valid_package_name()
+  
+          print("\n" + "=" * 60)
+          print(f" Creating project: {package_name}")
+          print("=" * 60 + "\n")
+  
+          # Create all files
+          create_directory_structure()
+          print()
+          create_main_dart()
+          create_pubspec(package_name)
+          create_github_workflow(package_name)
+          create_gitignore()
+          create_setup_script(package_name)
+          create_setup_sh(package_name)
+          create_analysis_options()
+          create_readme(package_name)
+          create_index_html(package_name)
+  
+          # Make setup.sh executable on Unix-like systems
+          if os.name != 'nt':
+              os.chmod('setup.sh', 0o755)
+  
+          print("\n" + "=" * 60)
+          print(" All files created successfully!")
+          print("=" * 60)
+          print("\nProject Structure:")
+          print("   |-- .github/workflows/")
+          print("   |   `-- build-windows.yml")
+          print("   |-- docs/")
+          print("   |   `-- index.html    (project landing page)")
+          print("   |-- lib/")
+          print("   |   `-- main.dart")
+          print("   |-- windows/         (will be created by flutter create)")
+          print("   |-- analysis_options.yaml")
+          print("   |-- pubspec.yaml")
+          print("   |-- README.md")
+          print("   |-- .gitignore")
+          print("   |-- setup.bat  (Windows)")
+          print("   `-- setup.sh   (Linux/Mac)")
+  
+          print(f"\nPackage Name: {package_name}")
+  
+          print("\nNext Steps:")
+          print("   1. Run setup script:")
+          print("      - Windows: setup.bat")
+          print("      - Linux/Mac: ./setup.sh")
+          print("   2. Or manually:")
+          print("      - flutter pub get")
+          print(f"      - flutter create --platforms=windows --project-name {package_name} .")
+          print("      - flutter build windows --release")
+          print("   3. Initialize Git:")
+          print("      - git init")
+          print("      - git add .")
+          print("      - git commit -m 'Initial commit'")
+          print("   4. Push to GitHub and Actions will build automatically")
+          print("   5. View the landing page:")
+          print("      - Open docs/index.html in your browser")
+  
+          print("\nTo create a release:")
+          print("   git tag v1.0.0")
+          print("   git push origin v1.0.0")
+  
+          print("\n" + "=" * 60)
+  
+      except KeyboardInterrupt:
+          print("\n\nCancelled by user.")
+          sys.exit(0)
+      except Exception as e:
+          print(f"\nError: {e}")
+          sys.exit(1)
+  
+  
+  if __name__ == "__main__":
+      main()
+├── docs
+│   └── index.html
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Simpleflutter - Flutter Windows App</title>
+      <style>
+          * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+          }
+  
+          body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              min-height: 100vh;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              padding: 20px;
+          }
+  
+          .container {
+              background: white;
+              border-radius: 24px;
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+              max-width: 800px;
+              width: 100%;
+              padding: 60px 50px;
+              text-align: center;
+              transition: transform 0.3s ease;
+          }
+  
+          .container:hover {
+              transform: translateY(-5px);
+          }
+  
+          .logo {
+              margin-bottom: 30px;
+          }
+  
+          .logo-svg {
+              width: 120px;
+              height: 120px;
+          }
+  
+          h1 {
+              font-size: 2.5rem;
+              color: #1a1a2e;
+              margin-bottom: 10px;
+              font-weight: 700;
+              letter-spacing: -0.5px;
+          }
+  
+          .subtitle {
+              font-size: 1.1rem;
+              color: #666;
+              margin-bottom: 30px;
+              font-weight: 400;
+          }
+  
+          .badge-container {
+              display: flex;
+              justify-content: center;
+              gap: 12px;
+              margin-bottom: 35px;
+              flex-wrap: wrap;
+          }
+  
+          .badge {
+              background: #f0f0f0;
+              padding: 8px 18px;
+              border-radius: 20px;
+              font-size: 0.85rem;
+              color: #555;
+              font-weight: 500;
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+          }
+  
+          .badge .dot {
+              width: 8px;
+              height: 8px;
+              border-radius: 50%;
+              display: inline-block;
+          }
+  
+          .badge .dot.green {
+              background: #4caf50;
+          }
+  
+          .badge .dot.blue {
+              background: #667eea;
+          }
+  
+          .badge .dot.orange {
+              background: #ff9800;
+          }
+  
+          .feature-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: 20px;
+              margin: 35px 0 40px;
+              text-align: left;
+          }
+  
+          .feature-item {
+              background: #f8f9fa;
+              padding: 20px 20px 20px 25px;
+              border-radius: 12px;
+              border-left: 4px solid #667eea;
+              transition: all 0.3s ease;
+          }
+  
+          .feature-item:hover {
+              background: #f0f1ff;
+              transform: translateX(5px);
+          }
+  
+          .feature-item .icon {
+              font-size: 1.5rem;
+              margin-bottom: 8px;
+          }
+  
+          .feature-item h3 {
+              font-size: 0.95rem;
+              color: #1a1a2e;
+              margin-bottom: 4px;
+          }
+  
+          .feature-item p {
+              font-size: 0.85rem;
+              color: #666;
+              line-height: 1.4;
+          }
+  
+          .button-group {
+              display: flex;
+              gap: 15px;
+              justify-content: center;
+              flex-wrap: wrap;
+              margin-top: 10px;
+          }
+  
+          .btn {
+              padding: 14px 32px;
+              border-radius: 12px;
+              font-size: 1rem;
+              font-weight: 600;
+              text-decoration: none;
+              transition: all 0.3s ease;
+              display: inline-flex;
+              align-items: center;
+              gap: 10px;
+          }
+  
+          .btn-primary {
+              background: #667eea;
+              color: white;
+              box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+          }
+  
+          .btn-primary:hover {
+              background: #5a6fd6;
+              transform: translateY(-2px);
+              box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+          }
+  
+          .btn-secondary {
+              background: #f0f0f0;
+              color: #333;
+          }
+  
+          .btn-secondary:hover {
+              background: #e0e0e0;
+              transform: translateY(-2px);
+          }
+  
+          .btn-github {
+              background: #24292e;
+              color: white;
+          }
+  
+          .btn-github:hover {
+              background: #1a1e22;
+              transform: translateY(-2px);
+              box-shadow: 0 4px 15px rgba(36, 41, 46, 0.4);
+          }
+  
+          .version-info {
+              margin-top: 40px;
+              padding-top: 30px;
+              border-top: 1px solid #e0e0e0;
+              font-size: 0.9rem;
+              color: #999;
+          }
+  
+          .version-info strong {
+              color: #667eea;
+          }
+  
+          @media (max-width: 640px) {
+              .container {
+                  padding: 40px 25px;
+              }
+  
+              h1 {
+                  font-size: 2rem;
+              }
+  
+              .feature-grid {
+                  grid-template-columns: 1fr;
+              }
+  
+              .button-group {
+                  flex-direction: column;
+                  align-items: stretch;
+              }
+  
+              .btn {
+                  justify-content: center;
+              }
+          }
+      </style>
+  </head>
+  <body>
+      <div class="container">
+          <div class="logo">
+              <svg class="logo-svg" viewBox="0 0 256 318" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M128 318L0 190.8V63.6L128 190.8L256 63.6V190.8L128 318Z" fill="#667eea" opacity="0.9"/>
+                  <path d="M128 190.8L0 63.6L128 -63.6L256 63.6L128 190.8Z" fill="#764ba2" opacity="0.8"/>
+                  <path d="M128 127.2L0 0V63.6L128 190.8L256 63.6V0L128 127.2Z" fill="#667eea" opacity="0.6"/>
+                  <circle cx="128" cy="63.6" r="12" fill="white" opacity="0.9"/>
+                  <circle cx="128" cy="190.8" r="12" fill="white" opacity="0.9"/>
+              </svg>
+          </div>
+  
+          <h1>Simpleflutter</h1>
+          <p class="subtitle">A modern Flutter Windows application with automated builds</p>
+  
+          <div class="badge-container">
+              <span class="badge">
+                  <span class="dot green"></span>
+                  Flutter
+              </span>
+              <span class="badge">
+                  <span class="dot blue"></span>
+                  Windows 10/11
+              </span>
+              <span class="badge">
+                  <span class="dot orange"></span>
+                  v1.0.0
+              </span>
+              <span class="badge">
+                  ⚡ GitHub Actions
+              </span>
+          </div>
+  
+          <div class="feature-grid">
+              <div class="feature-item">
+                  <div class="icon">📱</div>
+                  <h3>Flutter Framework</h3>
+                  <p>Built with Flutter stable channel for modern UI</p>
+              </div>
+              <div class="feature-item">
+                  <div class="icon">🖥️</div>
+                  <h3>Windows Native</h3>
+                  <p>Fully integrated Windows desktop application</p>
+              </div>
+              <div class="feature-item">
+                  <div class="icon">🚀</div>
+                  <h3>CI/CD Ready</h3>
+                  <p>Automated builds with GitHub Actions</p>
+              </div>
+              <div class="feature-item">
+                  <div class="icon">📦</div>
+                  <h3>Easy Releases</h3>
+                  <p>One-command releases with tags</p>
+              </div>
+          </div>
+  
+          <div class="button-group">
+              <a href="#" class="btn btn-primary">
+                  ⬇️ Download Latest
+              </a>
+              <a href="#" class="btn btn-github">
+                  <svg height="20" viewBox="0 0 16 16" width="20" fill="currentColor">
+                      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                  </svg>
+                  View on GitHub
+              </a>
+              <a href="#" class="btn btn-secondary">
+                  📖 Documentation
+              </a>
+          </div>
+  
+          <div class="version-info">
+              <strong>simpleflutter</strong> • Built with ❤️ using Flutter • 
+              <span id="year">2026</span>
+          </div>
+      </div>
+  
+      <script>
+          document.getElementById('year').textContent = new Date().getFullYear();
+      </script>
+  </body>
+  </html>
+├── ee.py
   import os
   
   def print_tree(folder_path, file_handle, prefix="", show_content=False):
@@ -357,7 +2844,7 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.windows, size: 16, color: Colors.grey.shade600),
+                        Icon(Icons.desktop_windows, size: 16, color: Colors.grey.shade600),
                         const SizedBox(width: 5),
                         Text(
                           'Windows',
@@ -375,8 +2862,9 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
     }
   }
 ├── pubspec.yaml
-  name: fl_egshehh8  # ← اینجا خط زیر است، نه خط تیره
+  name: simpleflutter
   description: A simple Flutter Windows application
+  publish_to: 'none'
   version: 1.0.0+1
   
   environment:
@@ -393,6 +2881,266 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   
   flutter:
     uses-material-design: true
+├── pusher.py
+  #!/usr/bin/env python3
+  import os
+  import sys
+  import re
+  import subprocess
+  from pathlib import Path
+  from datetime import datetime
+  
+  PROJECT_ROOT = Path(__file__).parent.resolve()
+  REPO_OWNER = "4h49848h89e9"
+  REPO_NAME = "fl-egshehh8"
+  PUBSPEC_PATH = PROJECT_ROOT / "pubspec.yaml"
+  WORKFLOWS_DIR = PROJECT_ROOT / ".github" / "workflows"
+  
+  class Colors:
+      GREEN = '\033[92m'
+      RED = '\033[91m'
+      YELLOW = '\033[93m'
+      BLUE = '\033[94m'
+      CYAN = '\033[96m'
+      WHITE = '\033[97m'
+      BOLD = '\033[1m'
+      DIM = '\033[2m'
+      RESET = '\033[0m'
+  
+  if sys.platform == 'win32':
+      try:
+          import ctypes
+          kernel32 = ctypes.windll.kernel32
+          kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+      except Exception:
+          pass
+  
+  def print_header(text):
+      print(f"\n{Colors.CYAN}{'=' * 70}{Colors.RESET}")
+      print(f"{Colors.BOLD}{Colors.WHITE}{text:^70}{Colors.RESET}")
+      print(f"{Colors.CYAN}{'=' * 70}{Colors.RESET}\n")
+  
+  def print_success(text): print(f"{Colors.GREEN}OK  {text}{Colors.RESET}")
+  def print_error(text): print(f"{Colors.RED}ERR {text}{Colors.RESET}")
+  def print_warning(text): print(f"{Colors.YELLOW}WARN {text}{Colors.RESET}")
+  def print_info(text): print(f"{Colors.BLUE}INFO {text}{Colors.RESET}")
+  
+  def run_git_command(cmd, check=False):
+      try:
+          result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60)
+          if check and result.returncode != 0:
+              print_error(f"Git command failed: {cmd}")
+              print_error(result.stderr)
+          return result
+      except subprocess.TimeoutExpired:
+          print_error(f"Git command timed out: {cmd}")
+          return None
+  
+  def git_add_all():
+      print_info("git add -A")
+      result = run_git_command("git add -A")
+      if result and result.returncode == 0:
+          print_success("git add -A successful")
+          return True
+      print_error("git add -A failed")
+      if result is not None:
+          if result.stderr:
+              print_error(result.stderr.strip())
+          if result.stdout:
+              print_error(result.stdout.strip())
+      return False
+  
+  def git_commit(message):
+      print_info(f'git commit -m "{message}"')
+      result = run_git_command(f'git commit -m "{message}"')
+      if result and result.returncode == 0:
+          print_success("Commit successful.")
+          return True
+      if result and "nothing to commit" in (result.stderr or ""):
+          print_warning("No changes to commit.")
+          return True
+      print_error("Commit failed.")
+      if result and result.stderr:
+          print_error(result.stderr.strip())
+      return False
+  
+  def git_force_push():
+      print_info("git push --force origin main")
+      result = run_git_command("git push --force origin main")
+      if result and result.returncode == 0:
+          print_success("Force push successful.")
+          return True
+      print_error("Force push failed.")
+      if result and result.stderr:
+          print_error(result.stderr.strip())
+      return False
+  
+  def get_next_version_tag():
+      result = run_git_command("git tag -l")
+      if result is None:
+          return "v1.0.1"
+      tags = result.stdout.splitlines()
+      pattern = re.compile(r'^v(\d+)\.(\d+)\.(\d+)$')
+      max_version = [1, 0, 0]
+      for tag in tags:
+          match = pattern.match(tag)
+          if match:
+              major, minor, patch = map(int, match.groups())
+              if (major, minor, patch) > tuple(max_version):
+                  max_version = [major, minor, patch]
+      max_version[2] += 1
+      return f"v{max_version[0]}.{max_version[1]}.{max_version[2]}"
+  
+  def delete_existing_tag(tag_name):
+      print_info(f"Deleting existing tag: {tag_name}")
+      run_git_command(f"git tag -d {tag_name}")
+      run_git_command(f"git push origin :refs/tags/{tag_name}")
+  
+  def create_and_push_tag(tag_name):
+      print_info(f"Creating and pushing tag: {tag_name}")
+      delete_existing_tag(tag_name)
+      result = run_git_command(f"git tag {tag_name}")
+      if result is None or result.returncode != 0:
+          print_error("Tag creation failed.")
+          return False
+      result = run_git_command(f"git push origin {tag_name}")
+      if result and result.returncode == 0:
+          print_success(f"Tag {tag_name} pushed successfully.")
+          return True
+      print_error("Tag push failed.")
+      return False
+  
+  def check_git_config():
+      name = run_git_command("git config --global user.name")
+      email = run_git_command("git config --global user.email")
+      if not name or not name.stdout.strip() or not email or not email.stdout.strip():
+          print_warning("Git user configuration not found!")
+          print_info("Setting default git config...")
+          run_git_command('git config --global user.name "Auto Pusher"')
+          run_git_command('git config --global user.email "auto@pusher.local"')
+      return True
+  
+  def check_pubspec_name():
+      """
+      Guards against the exact bug that broke this repo's CI before:
+      an invalid/non-ASCII package `name:` in pubspec.yaml makes
+      `flutter create --platforms=windows .` fail with exit code 1
+      inside the GitHub Actions workflow. We catch it locally, before
+      pushing, so a broken commit never goes up.
+      """
+      print_info("Checking pubspec.yaml package name...")
+  
+      if not PUBSPEC_PATH.exists():
+          print_warning("pubspec.yaml not found, skipping name check.")
+          return True
+  
+      raw = PUBSPEC_PATH.read_text(encoding="utf-8")
+  
+      non_ascii = [(i, ch) for i, ch in enumerate(raw) if ord(ch) > 127]
+  
+      name_match = re.search(r'^name:\s*([^\s#]+)', raw, re.MULTILINE)
+      if not name_match:
+          print_error("Could not find a `name:` field in pubspec.yaml.")
+          return False
+  
+      name_value = name_match.group(1)
+      valid_pattern = re.compile(r'^[a-z][a-z0-9_]*$')
+  
+      if not valid_pattern.match(name_value):
+          print_error(f"Invalid package name in pubspec.yaml: '{name_value}'")
+          print_error("Must be lowercase, start with a letter, and use underscores only (no dashes).")
+          return False
+  
+      if non_ascii:
+          print_warning(f"Found {len(non_ascii)} non-ASCII character(s) in pubspec.yaml.")
+          print_warning("These are usually harmless in comments/description, but double-check")
+          print_warning("nothing invisible is sitting right next to the `name:` value.")
+  
+      print_success(f"pubspec.yaml name OK: '{name_value}'")
+      return True
+  
+  def check_workflow_files():
+      """
+      Warns (does not block) if there are multiple workflow files that
+      each build+release on push -- this causes duplicate CI runs and
+      was a real source of confusion earlier (main.yml + build-windows.yml
+      both existing and both triggering on every push).
+      """
+      print_info("Checking .github/workflows/ for duplicate workflow files...")
+  
+      if not WORKFLOWS_DIR.exists():
+          print_warning(".github/workflows/ not found, skipping check.")
+          return True
+  
+      yml_files = sorted(list(WORKFLOWS_DIR.glob("*.yml")) + list(WORKFLOWS_DIR.glob("*.yaml")))
+  
+      if len(yml_files) <= 1:
+          print_success(f"{len(yml_files)} workflow file(s) found -- no duplicates.")
+          return True
+  
+      build_like = []
+      for f in yml_files:
+          try:
+              text = f.read_text(encoding="utf-8")
+          except Exception:
+              continue
+          if "windows-latest" in text or "windows-2022" in text or "build windows" in text.lower():
+              build_like.append(f.name)
+  
+      if len(build_like) > 1:
+          print_warning(f"Found {len(build_like)} Windows build workflows: {', '.join(build_like)}")
+          print_warning("Each one will trigger separately on every push, doubling your build minutes.")
+          print_warning("Consider deleting all but one. Continuing anyway (not blocking the push).")
+      else:
+          print_success("No duplicate Windows build workflows detected.")
+  
+      return True
+  
+  def main():
+      print_header("FL-EGSHEHH8 AUTO PUSHER (FORCE PUSH ALL FILES)")
+      print_info(f"Project root: {PROJECT_ROOT}")
+  
+      check_git_config()
+  
+      print_header("1. Pre-push safety checks")
+      if not check_pubspec_name():
+          print_error("Fix pubspec.yaml before pushing. Aborting to avoid breaking CI again.")
+          sys.exit(1)
+      check_workflow_files()
+  
+      print_header("2. Adding all files to git")
+      if not git_add_all():
+          print_error("git add failed. Exiting.")
+          sys.exit(1)
+  
+      print_header("3. Committing changes")
+      commit_msg = f"Auto-fix: {datetime.now().strftime('%Y-%m-%d %H:%M')} (pusher.py)"
+      if not git_commit(commit_msg):
+          print_warning("Attempting empty commit...")
+          result = run_git_command('git commit --allow-empty -m "Auto-fix: No changes"')
+          if result and result.returncode != 0:
+              print_error("Commit failed. Exiting.")
+              sys.exit(1)
+  
+      print_header("4. Force pushing to main")
+      if not git_force_push():
+          print_error("Force push failed. Exiting.")
+          sys.exit(1)
+  
+      print_header("5. Creating new tag")
+      new_tag = get_next_version_tag()
+      print_info(f"New tag: {new_tag}")
+      if not create_and_push_tag(new_tag):
+          print_error("Tag creation/push failed. Exiting.")
+          sys.exit(1)
+  
+      print_header("ALL DONE")
+      print_success(f"Tag {new_tag} created and pushed.")
+      print_info(f"Actions: https://github.com/{REPO_OWNER}/{REPO_NAME}/actions")
+      print_info(f"Release: https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{new_tag}")
+  
+  if __name__ == "__main__":
+      main()
 ├── setup.bat
   @echo off
   echo ====================================
@@ -415,7 +3163,7 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   
   echo.
   echo Creating Windows project files...
-  flutter create --platforms=windows .
+  flutter create --platforms=windows --project-name simpleflutter .
   
   echo.
   echo Getting dependencies...
@@ -454,7 +3202,7 @@ c:\Users\nasle javan\Desktop\SimpleFlutter/
   
   echo ""
   echo "Creating Windows project files..."
-  flutter create --platforms=windows .
+  flutter create --platforms=windows --project-name simpleflutter .
   
   echo ""
   echo "Getting dependencies..."
