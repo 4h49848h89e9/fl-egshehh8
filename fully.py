@@ -586,7 +586,7 @@ target_link_libraries(vpn_plugin PRIVATE flutter_engine)
     print_success("All Flutter files generated.")
 
 # ============================================================
-#  GIT PUSH LOGIC (with extended timeout)
+#  GIT PUSH LOGIC (with retry and detailed error)
 # ============================================================
 def git_add_all():
     print_info("git add -A")
@@ -595,6 +595,8 @@ def git_add_all():
         print_success("git add -A successful")
         return True
     print_error("git add -A failed")
+    if result and result.stderr:
+        print_error(result.stderr.strip())
     return False
 
 def git_commit(message):
@@ -607,15 +609,29 @@ def git_commit(message):
         print_warning("No changes to commit.")
         return True
     print_error("Commit failed.")
+    if result and result.stderr:
+        print_error(result.stderr.strip())
     return False
 
 def git_force_push():
+    # First try normal force push
     print_info("git push --force origin main (timeout: 300s)")
     result = run_git_command("git push --force origin main", timeout=300)
     if result and result.returncode == 0:
         print_success("Force push successful.")
         return True
-    print_error("Force push failed.")
+    if result and result.stderr:
+        print_error("Force push error: " + result.stderr.strip())
+
+    # Fallback: try --force-with-lease
+    print_info("Trying git push --force-with-lease origin main")
+    result = run_git_command("git push --force-with-lease origin main", timeout=300)
+    if result and result.returncode == 0:
+        print_success("Force with lease push successful.")
+        return True
+    if result and result.stderr:
+        print_error("Force-with-lease error: " + result.stderr.strip())
+
     return False
 
 def get_next_version_tag():
@@ -662,10 +678,23 @@ def check_git_config():
         run_git_command('git config --global user.email "auto@pusher.local"', timeout=10)
     return True
 
+def check_remote():
+    result = run_git_command("git remote -v", timeout=10)
+    if result and result.returncode == 0:
+        print_info("Remote(s) configured:")
+        print(result.stdout)
+        return True
+    print_error("No git remote found. Please set origin.")
+    return False
+
 def push_to_github():
     print_header("GIT PUSH")
     if not check_git_config():
         print_error("Git config check failed.")
+        return False
+
+    if not check_remote():
+        print_error("Remote check failed.")
         return False
 
     print_info("Adding all files...")
@@ -683,17 +712,25 @@ def push_to_github():
 
     print_info("Force pushing...")
     if not git_force_push():
+        print_error("Push failed. Please check your internet connection, credentials, and remote URL.")
+        print_info("You can manually push with:")
+        print_info("  git push --force origin main")
+        print_info("  git push --tags")
         return False
 
     new_tag = get_next_version_tag()
     print_info(f"New tag: {new_tag}")
     if not create_and_push_tag(new_tag):
+        print_error("Tag push failed. You can manually push tags with: git push --tags")
         return False
 
     print_success(f"Push complete. Tag: {new_tag}")
     print_info(f"Actions: https://github.com/{REPO_OWNER}/{REPO_NAME}/actions")
     print_info(f"Release: https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/tag/{new_tag}")
     return True
+
+def print_warning(text):
+    print(f"⚠️  {text}")
 
 # ============================================================
 #  MAIN
@@ -711,7 +748,7 @@ def main():
         if push_to_github():
             print_success("All done! Project is live on GitHub.")
         else:
-            print_error("Push failed. Please check your network and git remote.")
+            print_error("Push failed. Please fix the issue and push manually.")
             sys.exit(1)
     else:
         print_info("Skipped push. You can run 'python pusher.py' later.")
